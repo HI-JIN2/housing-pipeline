@@ -74,16 +74,23 @@ class DBService:
                 CREATE TABLE IF NOT EXISTS housing_data (
                     id VARCHAR(255) PRIMARY KEY,
                     announcement_id VARCHAR(255),
+                    index INTEGER,
+                    district VARCHAR(100),
+                    complex_no VARCHAR(100),
                     name VARCHAR(255),
                     address TEXT,
+                    unit_no VARCHAR(100),
+                    area FLOAT,
                     house_type VARCHAR(100),
-                    deposit INTEGER,
-                    monthly_rent INTEGER,
+                    elevator VARCHAR(50),
+                    deposit FLOAT,
+                    monthly_rent FLOAT,
                     lat FLOAT,
                     lng FLOAT,
                     nearest_station VARCHAR(100),
                     distance_meters INTEGER,
                     walking_time_mins INTEGER,
+                    extra_info JSONB DEFAULT '{}',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
@@ -146,25 +153,36 @@ class DBService:
         async with self.pool.acquire() as conn:
             await conn.execute("""
                 INSERT INTO housing_data (
-                    id, announcement_id, name, address, house_type, deposit, monthly_rent,
-                    lat, lng, nearest_station, distance_meters, walking_time_mins
+                    id, announcement_id, index, district, complex_no, name, address, 
+                    unit_no, area, house_type, elevator, deposit, monthly_rent,
+                    lat, lng, nearest_station, distance_meters, walking_time_mins, extra_info
                 ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
                 ) ON CONFLICT (id) DO UPDATE SET
                     announcement_id = EXCLUDED.announcement_id,
+                    index = EXCLUDED.index,
+                    district = EXCLUDED.district,
+                    complex_no = EXCLUDED.complex_no,
                     name = EXCLUDED.name,
                     address = EXCLUDED.address,
+                    unit_no = EXCLUDED.unit_no,
+                    area = EXCLUDED.area,
                     house_type = EXCLUDED.house_type,
+                    elevator = EXCLUDED.elevator,
                     deposit = EXCLUDED.deposit,
                     monthly_rent = EXCLUDED.monthly_rent,
                     lat = EXCLUDED.lat,
                     lng = EXCLUDED.lng,
                     nearest_station = EXCLUDED.nearest_station,
                     distance_meters = EXCLUDED.distance_meters,
-                    walking_time_mins = EXCLUDED.walking_time_mins;
+                    walking_time_mins = EXCLUDED.walking_time_mins,
+                    extra_info = EXCLUDED.extra_info;
             """,
             data_dict.get('id'), data_dict.get('announcement_id'), 
-            data_dict.get('name'), data_dict.get('address'), 
-            data_dict.get('house_type'), data_dict.get('deposit'), data_dict.get('monthly_rent'),
+            data_dict.get('index'), data_dict.get('district'), data_dict.get('complex_no'),
+            data_dict.get('name'), data_dict.get('address'), data_dict.get('unit_no'),
+            data_dict.get('area'), data_dict.get('house_type'), data_dict.get('elevator'),
+            data_dict.get('deposit'), data_dict.get('monthly_rent'),
             data_dict.get('lat'), data_dict.get('lng'), 
-            data_dict.get('nearest_station'), data_dict.get('distance_meters'), data_dict.get('walking_time_mins'))
+            data_dict.get('nearest_station'), data_dict.get('distance_meters'), 
+            data_dict.get('walking_time_mins'), json.dumps(data_dict.get('extra_info', {})))

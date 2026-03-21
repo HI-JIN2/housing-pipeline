@@ -15,9 +15,15 @@ function cn(...inputs: ClassValue[]) {
 
 interface House {
   id: string;
+  index?: number;
+  district?: string;
+  complex_no?: string;
   name: string;
   address: string;
-  house_type: string;
+  unit_no?: string;
+  area?: number;
+  house_type?: string;
+  elevator?: string;
   deposit: number;
   monthly_rent: number;
   raw_text_reference: string;
@@ -601,21 +607,39 @@ const App: React.FC = () => {
 
             <div className="flex-1 overflow-auto p-8 pt-0">
               <table className="w-full text-left border-separate border-spacing-y-2">
-                <thead className="sticky top-0 bg-white z-10 px-4">
-                  <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    <th className="pb-4 pl-4">Name</th>
-                    <th className="pb-4">Address</th>
-                    <th className="pb-4">Type</th>
-                    <th className="pb-4">Deposit (만)</th>
-                    <th className="pb-4">Rent (만)</th>
+                <thead>
+                  <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center border-b border-slate-100">
+                    <th className="pb-4 pl-4 text-left">#</th>
+                    <th className="pb-4 text-left">단지명</th>
+                    <th className="pb-4 text-left">자치구</th>
+                    <th className="pb-4 text-left">단지번호</th>
+                    <th className="pb-4 text-left">주소</th>
+                    <th className="pb-4">호수</th>
+                    <th className="pb-4">면적</th>
+                    <th className="pb-4">유형</th>
+                    <th className="pb-4">승강기</th>
+                    <th className="pb-4">보증금(만)</th>
+                    <th className="pb-4 pr-4">월세(만)</th>
                   </tr>
                 </thead>
                 <tbody className="space-y-4">
                   {previewData.houses.map((h, i) => (
                     <tr key={i} className="bg-slate-50 hover:bg-indigo-50 transition-colors group">
-                      <td className="p-4 py-3 rounded-l-2xl">
+                      <td className="pl-4 py-3 rounded-l-2xl">
                         <input 
-                          className="bg-transparent border-none font-bold text-slate-800 focus:ring-1 focus:ring-indigo-300 rounded px-2 w-full outline-none"
+                          type="number"
+                          className="bg-transparent border-none text-[10px] font-black text-slate-400 w-8 outline-none"
+                          value={h.index || ''}
+                          onChange={(e) => {
+                            const newHouses = [...previewData.houses];
+                            newHouses[i].index = parseInt(e.target.value) || 0;
+                            setPreviewData({...previewData, houses: newHouses});
+                          }}
+                        />
+                      </td>
+                      <td className="py-3">
+                        <input 
+                          className="bg-transparent border-none font-bold text-slate-800 text-xs focus:ring-1 focus:ring-indigo-300 rounded px-1 w-full outline-none"
                           value={h.name}
                           onChange={(e) => {
                             const newHouses = [...previewData.houses];
@@ -624,9 +648,31 @@ const App: React.FC = () => {
                           }}
                         />
                       </td>
-                      <td className="p-4 py-3">
+                      <td className="py-3">
                         <input 
-                          className="bg-transparent border-none text-xs text-slate-500 focus:ring-1 focus:ring-indigo-300 rounded px-2 w-full outline-none"
+                          className="bg-transparent border-none text-[10px] font-medium text-slate-600 focus:ring-1 focus:ring-indigo-300 rounded px-1 w-full outline-none"
+                          value={h.district || ''}
+                          onChange={(e) => {
+                            const newHouses = [...previewData.houses];
+                            newHouses[i].district = e.target.value;
+                            setPreviewData({...previewData, houses: newHouses});
+                          }}
+                        />
+                      </td>
+                      <td className="py-3">
+                        <input 
+                          className="bg-transparent border-none text-[10px] text-slate-400 focus:ring-1 focus:ring-indigo-300 rounded px-1 w-full outline-none"
+                          value={h.complex_no || ''}
+                          onChange={(e) => {
+                            const newHouses = [...previewData.houses];
+                            newHouses[i].complex_no = e.target.value;
+                            setPreviewData({...previewData, houses: newHouses});
+                          }}
+                        />
+                      </td>
+                      <td className="py-3 min-w-[120px]">
+                        <input 
+                          className="bg-transparent border-none text-[10px] text-slate-500 focus:ring-1 focus:ring-indigo-300 rounded px-1 w-full outline-none"
                           value={h.address}
                           onChange={(e) => {
                             const newHouses = [...previewData.houses];
@@ -635,10 +681,34 @@ const App: React.FC = () => {
                           }}
                         />
                       </td>
-                      <td className="p-4 py-3">
+                      <td className="py-3 text-center">
                         <input 
-                          className="bg-transparent border-none text-[10px] font-black text-slate-400 focus:ring-1 focus:ring-indigo-300 rounded px-2 w-full outline-none"
-                          value={h.house_type}
+                          className="bg-transparent border-none text-[10px] font-bold text-slate-700 w-12 text-center outline-none"
+                          value={h.unit_no || ''}
+                          onChange={(e) => {
+                            const newHouses = [...previewData.houses];
+                            newHouses[i].unit_no = e.target.value;
+                            setPreviewData({...previewData, houses: newHouses});
+                          }}
+                        />
+                      </td>
+                      <td className="py-3 text-center">
+                        <input 
+                          type="number"
+                          step="0.01"
+                          className="bg-transparent border-none text-[10px] font-bold text-indigo-600 w-12 text-center outline-none"
+                          value={h.area || 0}
+                          onChange={(e) => {
+                            const newHouses = [...previewData.houses];
+                            newHouses[i].area = parseFloat(e.target.value) || 0;
+                            setPreviewData({...previewData, houses: newHouses});
+                          }}
+                        />
+                      </td>
+                      <td className="py-3 text-center">
+                        <input 
+                          className="bg-transparent border-none text-[9px] font-black text-amber-600 w-12 text-center outline-none"
+                          value={h.house_type || ''}
                           onChange={(e) => {
                             const newHouses = [...previewData.houses];
                             newHouses[i].house_type = e.target.value;
@@ -646,26 +716,39 @@ const App: React.FC = () => {
                           }}
                         />
                       </td>
-                      <td className="p-4 py-3 text-sm font-bold text-indigo-600">
+                      <td className="py-3 text-center">
                         <input 
-                          type="number"
-                          className="bg-transparent border-none text-sm font-bold text-indigo-600 focus:ring-1 focus:ring-indigo-300 rounded px-2 w-16 outline-none"
-                          value={h.deposit}
+                          className="bg-transparent border-none text-[10px] text-slate-400 w-10 text-center outline-none"
+                          value={h.elevator || ''}
                           onChange={(e) => {
                             const newHouses = [...previewData.houses];
-                            newHouses[i].deposit = parseInt(e.target.value) || 0;
+                            newHouses[i].elevator = e.target.value;
                             setPreviewData({...previewData, houses: newHouses});
                           }}
                         />
                       </td>
-                      <td className="p-4 py-3 rounded-r-2xl">
+                      <td className="py-3 text-center">
                         <input 
                           type="number"
-                          className="bg-transparent border-none text-sm font-bold text-slate-700 focus:ring-1 focus:ring-indigo-300 rounded px-2 w-16 outline-none"
+                          step="0.1"
+                          className="bg-transparent border-none text-xs font-bold text-indigo-600 w-14 text-center outline-none"
+                          value={h.deposit}
+                          onChange={(e) => {
+                            const newHouses = [...previewData.houses];
+                            newHouses[i].deposit = parseFloat(e.target.value) || 0;
+                            setPreviewData({...previewData, houses: newHouses});
+                          }}
+                        />
+                      </td>
+                      <td className="py-3 pr-4 rounded-r-2xl text-center">
+                        <input 
+                          type="number"
+                          step="0.1"
+                          className="bg-transparent border-none text-xs font-bold text-slate-700 w-14 text-center outline-none"
                           value={h.monthly_rent}
                           onChange={(e) => {
                             const newHouses = [...previewData.houses];
-                            newHouses[i].monthly_rent = parseInt(e.target.value) || 0;
+                            newHouses[i].monthly_rent = parseFloat(e.target.value) || 0;
                             setPreviewData({...previewData, houses: newHouses});
                           }}
                         />

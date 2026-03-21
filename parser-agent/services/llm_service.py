@@ -215,24 +215,38 @@ class LLMService:
                 
                 [CRITICAL INSTRUCTIONS]
                 1. ANALYZE every row in the CSV tables.
-                2. Extract EVERY SINGLE housing unit/item mentioned.
-                3. DO NOT SUMMARIZE multiple items into one.
-                4. DO NOT SKIP ANY ROWS.
-                5. If a row mentions a "complex name" (단지명) and "house type" (주택형/전용면적), it IS a record.
-                6. Extract "deposit" (임대보증금) and "monthly_rent" (월임대료) as numbers in "만원" units.
-                7. Return ONLY a valid JSON object.
+                2. Extract EVERY SINGLE housing unit/item mentioned (No summarizing).
+                3. Mandatory Fields:
+                   - "index": Number corresponding to '번호'.
+                   - "district": '자치구' (e.g. 성북구, 은평구).
+                   - "complex_no": '단지번호'.
+                   - "name": '단지명/주택명'.
+                   - "address": '주소'.
+                   - "unit_no": '호' or '동호'.
+                   - "area": '면적' or '전용면적' (as a number).
+                   - "elevator": '승강기' (있음/없음 or Y/N).
+                   - "deposit": '보증금' (number in 만원).
+                   - "monthly_rent": '임대료' (number in 만원).
+                4. [FLEIXIBLE EXTRA INFO]: Every other column or piece of text not in mandatory list MUST be captured in "extra_info" using descriptive keys. Use MongoDB's schema flexibility - capture everything you find in the PDF.
+                5. Return ONLY a valid JSON object.
 
                 [JSON SCHEMA]
                 {{
                     "announcement_title": "string",
                     "houses": [
                         {{
+                            "index": number,
+                            "district": "string",
+                            "complex_no": "string",
                             "name": "string",
                             "address": "string", 
+                            "unit_no": "string",
+                            "area": number,
                             "house_type": "string",
-                            "deposit": number (만원),
-                            "monthly_rent": number (만원),
-                            "extra_info": {{}}
+                            "elevator": "string",
+                            "deposit": number,
+                            "monthly_rent": number,
+                            "extra_info": {{ "any_other_column": "value" }}
                         }}
                     ]
                 }}

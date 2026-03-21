@@ -8,11 +8,16 @@ declare global {
 
 interface HouseLocation {
   id: string;
+  index?: number;
+  district?: string;
   name: string;
   lat?: number;
   lng?: number;
   address: string;
-  house_type: string;
+  unit_no?: string;
+  area?: number;
+  house_type?: string;
+  elevator?: string;
   deposit?: number;
   monthly_rent?: number;
   nearest_station?: string;
@@ -98,23 +103,31 @@ const KakaoMapView: React.FC<MapProps> = ({ houses, selectedHouseId }) => {
           : '';
 
         const iwContent = `
-          <div style="padding:15px; min-width:200px; border-radius:16px; border:none; background:white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);">
-            <div style="margin-bottom:8px;">
-              <span style="display:inline-block; padding:2px 8px; background:#f1f5f9; color:#64748b; font-size:10px; font-weight:800; border-radius:6px; margin-bottom:4px; text-transform:uppercase;">${house.house_type}</span>
-              <h4 style="margin:0; font-size:16px; font-weight:900; color:#1e293b; letter-spacing:-0.025em; line-height:1.2;">${house.name}</h4>
+          <div style="padding:20px; min-width:240px; border-radius:24px; border:none; background:white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);">
+            <div style="margin-bottom:12px; display:flex; justify-content:space-between; align-items:flex-start;">
+              <div>
+                <span style="display:inline-block; padding:2px 8px; background:#f1f5f9; color:#64748b; font-size:10px; font-weight:800; border-radius:6px; margin-bottom:4px; text-transform:uppercase;">${house.district || '주택'} · ${house.house_type || '-'}</span>
+                <h4 style="margin:0; font-size:18px; font-weight:900; color:#1e293b; letter-spacing:-0.025em; line-height:1.2;">${house.name}</h4>
+              </div>
+              ${house.elevator === '있음' ? '<span style="font-size:18px;">🛗</span>' : ''}
             </div>
             
-            <div style="padding:10px; background:#f8fafc; border-radius:12px; margin-top:8px;">
+            <div style="background:#f8fafc; padding:12px; border-radius:16px; margin-bottom:12px;">
               <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                <span style="font-size:11px; color:#94a3b8; font-weight:600;">보증금</span>
-                <span style="font-size:12px; color:#4f46e5; font-weight:800;">${depositStr}</span>
+                <span style="font-size:11px; color:#64748b; font-weight:600;">면적 / 호수</span>
+                <span style="font-size:11px; color:#1e293b; font-weight:800;">${house.area ? house.area + '㎡' : '-'} / ${house.unit_no || '-'}</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                <span style="font-size:11px; color:#64748b; font-weight:600;">보증금</span>
+                <span style="font-size:14px; color:#4f46e5; font-weight:900;">${depositStr}</span>
               </div>
               <div style="display:flex; justify-content:space-between;">
-                <span style="font-size:11px; color:#94a3b8; font-weight:600;">월세</span>
-                <span style="font-size:12px; color:#4f46e5; font-weight:800;">${rentStr}</span>
+                <span style="font-size:11px; color:#64748b; font-weight:600;">월세</span>
+                <span style="font-size:14px; color:#1e293b; font-weight:900;">${rentStr}</span>
               </div>
             </div>
-            
+
+            <p style="margin:0; font-size:11px; color:#94a3b8; line-height:1.4;">📍 ${house.address}</p>
             ${transportInfo}
             
             <p style="margin:10px 0 0; font-size:10px; color:#94a3b8; line-height:1.4; border-top:1px solid #f1f5f9; pt:8px;">📍 ${house.address}</p>

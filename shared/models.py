@@ -2,14 +2,20 @@ from pydantic import BaseModel, Field
 from typing import Optional
 
 class ParsedHousingData(BaseModel):
-    id: str = Field(description="고유 ID (보통 공고문명+순번)")
-    name: str = Field(description="아파트/주택 이름")
+    id: str = Field(description="고유 ID")
+    index: Optional[int] = Field(None, description="번호")
+    district: str = Field(description="자치구")
+    complex_no: Optional[str] = Field(None, description="단지번호")
+    name: str = Field(description="단지명/주택명")
     address: str = Field(description="주택 상세 주소")
-    house_type: str = Field(description="주택 유형 (예: 59A, 투룸 등)")
+    unit_no: Optional[str] = Field(None, description="호수")
+    area: float = Field(description="면적 (전용면적)")
+    house_type: Optional[str] = Field(None, description="주택 유형/타입")
+    elevator: Optional[str] = Field(None, description="승강기 여부")
     deposit: float = Field(description="보증금 (단위: 만원)")
     monthly_rent: float = Field(description="월세 (단위: 만원)")
-    raw_text_reference: Optional[str] = Field(None, description="파싱에 사용된 원본 텍스트 조각")
-    extra_info: dict = Field(default_factory=dict, description="기타 추가 정보 (방 개수, 주차, 승강기 등)")
+    raw_text_reference: Optional[str] = Field(None, description="파싱 원본 텍스트")
+    extra_info: dict = Field(default_factory=dict, description="기타 모든 추가 정보 (MongoDB 활용)")
 
 class EnrichedHousingData(ParsedHousingData):
     lat: float = Field(description="위도 (Latitude)")
