@@ -9,6 +9,9 @@ cleanup() {
     echo "1/2 끄는 중... [FastAPI 에이전트 서버들]"
     kill $PARSER_PID 2>/dev/null
     kill $GEO_PID 2>/dev/null
+    pkill -f "uvicorn main:app" 2>/dev/null
+    lsof -i :8000 -t | xargs kill -9 2>/dev/null
+    lsof -i :8001 -t | xargs kill -9 2>/dev/null
     
     echo "2/2 끄는 중... [Docker-Compose 인프라]"
     docker-compose stop
