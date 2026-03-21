@@ -44,6 +44,15 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/housing-frontend:latest
 
+      - name: Copy deploy scripts via SCP
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ubuntu
+          key: ${{ secrets.OCI_SSH_KEY }}
+          source: "deploy/docker-compose.prod.yml"
+          target: "/home/ubuntu/housing-pipeline"
+
       - name: Deploy to OCI via SSH
         uses: appleboy/ssh-action@master
         with:
@@ -51,6 +60,7 @@ jobs:
           username: ubuntu
           key: ${{ secrets.OCI_SSH_KEY }}
           script: |
+            mkdir -p /home/ubuntu/housing-pipeline
             cd /home/ubuntu/housing-pipeline
             # Copy docker-compose.prod.yml from the latest build if not already there
             # (In a real scenario, you might want to SCP it first or keep it in the VM)
