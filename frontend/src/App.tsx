@@ -18,7 +18,6 @@ interface House {
   index?: number;
   district?: string;
   complex_no?: string;
-  name: string;
   address: string;
   unit_no?: string;
   area?: number;
@@ -78,6 +77,7 @@ const App: React.FC = () => {
     localStorage.getItem('llm_model') || 'gpt-4o'
   );
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [geocodingIndices, setGeocodingIndices] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     fetchAnnouncements();
@@ -93,6 +93,44 @@ const App: React.FC = () => {
     }
   };
 
+  const onGeocodeAll = async () => {
+    if (!previewData) return;
+    const houses = [...previewData.houses];
+    // filter houses that need geocoding
+    const indicesToProcess = houses
+      .map((_, i) => i)
+      .filter(i => !houses[i].lat || !houses[i].lng);
+    
+    if (indicesToProcess.length === 0) return;
+
+    const batchSize = 5;
+    for (let i = 0; i < indicesToProcess.length; i += batchSize) {
+      const batch = indicesToProcess.slice(i, i + batchSize);
+      setGeocodingIndices(prev => new Set([...prev, ...batch]));
+      
+      await Promise.all(batch.map(async (idx) => {
+        try {
+          const res = await axios.get('/api/geocode', { params: { address: houses[idx].address } });
+          if (res.data.lat && res.data.lng) {
+            houses[idx] = { 
+              ...houses[idx], 
+              lat: res.data.lat, 
+              lng: res.data.lng 
+            };
+          }
+        } catch (e) {
+          console.error(`Geocoding failed for ${houses[idx].address}`, e);
+        } finally {
+          setGeocodingIndices(prev => {
+            const next = new Set(prev);
+            next.delete(idx);
+            return next;
+          });
+        }
+      }));
+      setPreviewData({ ...previewData, houses: [...houses] });
+    }
+  };
   const fetchAnnouncements = async () => {
     try {
       const res = await axios.get('/api/announcements');
@@ -192,7 +230,7 @@ const App: React.FC = () => {
         } else if (res.data.partial_result && res.data.partial_result.length > 0) {
           // Show last found house as a hint
           const lastHouse = res.data.partial_result[res.data.partial_result.length - 1];
-          setParsingStatus(`최근 발견: ${lastHouse.name || '알 수 없음'} (${res.data.count}건)`);
+          setParsingStatus(`최근 발견: ${lastHouse.address.split(' ').slice(0, 2).join(' ')} (${res.data.count}건)`);
         }
 
         if (res.data.step && res.data.step.includes('QUOTA')) {
@@ -252,7 +290,10 @@ const App: React.FC = () => {
       await axios.post('/api/save', {
         announcement_title: previewData.title,
         announcement_description: previewData.desc,
-        houses: previewData.houses
+        houses: previewData.houses.map(h => ({
+        ...h,
+        id: h.id || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2))
+      }))
       }, {
         headers: { 'x-admin-password': adminPassword }
       });
@@ -284,7 +325,6 @@ const App: React.FC = () => {
   };
 
   const filteredHouses = detail?.filter(h => 
-    h.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     h.address.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
@@ -400,7 +440,7 @@ const App: React.FC = () => {
                   <h3 className={cn(
                     "font-bold text-slate-800 transition-colors leading-tight pr-4",
                     selectedHouseId === house.id ? "text-indigo-700" : "group-hover:text-indigo-600"
-                  )}>{house.name}</h3>
+                  )}>{house.address.split(' ').slice(0, 3).join(' ')}</h3>
                   <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full text-[9px] font-black shrink-0">{house.house_type}</span>
                 </div>
                 
@@ -602,6 +642,14 @@ const App: React.FC = () => {
                   {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
                   최종 저장 및 지도로 보내기
                 </button>
+                <button 
+                  onClick={onGeocodeAll}
+                  disabled={uploading || geocodingIndices.size > 0}
+                  className="px-6 py-3 bg-emerald-600 text-white font-bold rounded-2xl hover:bg-emerald-700 shadow-lg flex items-center gap-2"
+                >
+                  {geocodingIndices.size > 0 ? <Loader2 className="w-5 h-5 animate-spin" /> : <MapPin className="w-5 h-5" />}
+                  주소 좌표 확인 (Geocode)
+                </button>
               </div>
             </div>
 
@@ -610,14 +658,14 @@ const App: React.FC = () => {
                 <thead>
                   <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center border-b border-slate-100">
                     <th className="pb-4 pl-4 text-left">#</th>
-                    <th className="pb-4 text-left">단지명</th>
+                    <th className="pb-4 text-left">주소</th>
                     <th className="pb-4 text-left">자치구</th>
                     <th className="pb-4 text-left">단지번호</th>
-                    <th className="pb-4 text-left">주소</th>
                     <th className="pb-4">호수</th>
                     <th className="pb-4">면적</th>
                     <th className="pb-4">유형</th>
                     <th className="pb-4">승강기</th>
+                    <th className="pb-4">GEO</th>
                     <th className="pb-4">보증금(만)</th>
                     <th className="pb-4 pr-4">월세(만)</th>
                   </tr>
@@ -639,11 +687,11 @@ const App: React.FC = () => {
                       </td>
                       <td className="py-3">
                         <input 
-                          className="bg-transparent border-none font-bold text-slate-800 text-xs focus:ring-1 focus:ring-indigo-300 rounded px-1 w-full outline-none"
-                          value={h.name}
+                          className="bg-transparent border-none text-[10px] text-slate-500 w-full text-left outline-none italic font-medium"
+                          value={h.address}
                           onChange={(e) => {
                             const newHouses = [...previewData.houses];
-                            newHouses[i].name = e.target.value;
+                            newHouses[i].address = e.target.value;
                             setPreviewData({...previewData, houses: newHouses});
                           }}
                         />
@@ -666,17 +714,6 @@ const App: React.FC = () => {
                           onChange={(e) => {
                             const newHouses = [...previewData.houses];
                             newHouses[i].complex_no = e.target.value;
-                            setPreviewData({...previewData, houses: newHouses});
-                          }}
-                        />
-                      </td>
-                      <td className="py-3 min-w-[120px]">
-                        <input 
-                          className="bg-transparent border-none text-[10px] text-slate-500 focus:ring-1 focus:ring-indigo-300 rounded px-1 w-full outline-none"
-                          value={h.address}
-                          onChange={(e) => {
-                            const newHouses = [...previewData.houses];
-                            newHouses[i].address = e.target.value;
                             setPreviewData({...previewData, houses: newHouses});
                           }}
                         />
@@ -728,6 +765,17 @@ const App: React.FC = () => {
                         />
                       </td>
                       <td className="py-3 text-center">
+                        <div className="flex justify-center">
+                          {geocodingIndices.has(i) ? (
+                            <Loader2 className="w-3 h-3 animate-spin text-slate-300" />
+                          ) : h.lat && h.lng ? (
+                            <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-200" title={`Lat: ${h.lat}, Lng: ${h.lng}`} />
+                          ) : (
+                            <div className="w-2 h-2 rounded-full bg-slate-200" title="좌표 없음" />
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 text-center">
                         <input 
                           type="number"
                           step="0.1"
@@ -744,7 +792,7 @@ const App: React.FC = () => {
                         <input 
                           type="number"
                           step="0.1"
-                          className="bg-transparent border-none text-xs font-bold text-slate-700 w-14 text-center outline-none"
+                          className="bg-transparent border-none text-xs font-bold text-indigo-600 w-14 text-center outline-none"
                           value={h.monthly_rent}
                           onChange={(e) => {
                             const newHouses = [...previewData.houses];

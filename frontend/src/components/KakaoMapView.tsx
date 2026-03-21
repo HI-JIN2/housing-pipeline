@@ -10,7 +10,6 @@ interface HouseLocation {
   id: string;
   index?: number;
   district?: string;
-  name: string;
   lat?: number;
   lng?: number;
   address: string;
@@ -107,7 +106,7 @@ const KakaoMapView: React.FC<MapProps> = ({ houses, selectedHouseId }) => {
             <div style="margin-bottom:12px; display:flex; justify-content:space-between; align-items:flex-start;">
               <div>
                 <span style="display:inline-block; padding:2px 8px; background:#f1f5f9; color:#64748b; font-size:10px; font-weight:800; border-radius:6px; margin-bottom:4px; text-transform:uppercase;">${house.district || '주택'} · ${house.house_type || '-'}</span>
-                <h4 style="margin:0; font-size:18px; font-weight:900; color:#1e293b; letter-spacing:-0.025em; line-height:1.2;">${house.name}</h4>
+                <h4 style="margin:0; font-size:18px; font-weight:900; color:#1e293b; letter-spacing:-0.025em; line-height:1.2;">${house.address.split(' ').slice(0, 3).join(' ')}</h4>
               </div>
               ${house.elevator === '있음' ? '<span style="font-size:18px;">🛗</span>' : ''}
             </div>
