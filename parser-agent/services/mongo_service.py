@@ -27,23 +27,25 @@ class MongoService:
         await self.announcements_collection.insert_one(announcement_data)
 
     async def get_recent_announcements(self, limit: int = 10) -> List[Dict[str, Any]]:
-        cursor = self.announcements_collection.find({}, {"_id": 1, "filename": 1, "parsed_houses": 1, "announcement_title": 1, "announcement_description": 1}).sort([("_id", -1)]).limit(limit)
+        cursor = self.announcements_collection.find({}, {"_id": 1, "filename": 1, "filenames": 1, "parsed_houses": 1, "announcement_title": 1, "announcement_description": 1}).sort([("_id", -1)]).limit(limit)
         results = await cursor.to_list(length=limit)
         
         summary = []
         for doc in results:
-            filename = doc.get("filename", "Unknown")
+            filenames = doc.get("filenames", [doc.get("filename", "Unknown")])
+            primary_filename = filenames[0] if filenames else "Unknown"
+            
             houses = doc.get("parsed_houses", [])
             house_count = len(houses)
             
             # Use the extracted announcement title if available
-            title = doc.get("announcement_title") or filename
+            title = doc.get("announcement_title") or primary_filename
             description = doc.get("announcement_description") or ""
             
             if not doc.get("announcement_title") and house_count > 0:
                 # Fallback to first house name for older records
                 first_house = houses[0]
-                title = first_house.get("name", filename)
+                title = first_house.get("name", primary_filename)
                 
                 parts = []
                 if first_house.get("house_type"):
@@ -54,7 +56,7 @@ class MongoService:
                 
             summary.append({
                 "id": str(doc["_id"]),
-                "filename": filename,
+                "filename": primary_filename,
                 "title": title,
                 "description": description,
                 "house_count": house_count
