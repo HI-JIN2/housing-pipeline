@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
   FileText, Loader2, AlertCircle, Home, 
-  MapPin, BadgeCent, Layers, ChevronLeft, Search, Menu, X, Plus, Library, ChevronRight
+  MapPin, BadgeCent, Layers, ChevronLeft, Search, Menu, X, Plus, Library, ChevronRight,
+  ChevronDown, Check, Upload
 } from 'lucide-react';
 import MapView from './components/KakaoMapView';
 import { clsx, type ClassValue } from 'clsx';
@@ -62,6 +63,14 @@ const App: React.FC = () => {
   const [progressTotal, setProgressTotal] = useState<number>(0);
   const [activeModel, setActiveModel] = useState<string>('');
   const [activeKeyIdx, setActiveKeyIdx] = useState<number>(-1);
+  const [activeProvider, setActiveProvider] = useState<string>('gemini');
+  const [selectedProvider, setSelectedProvider] = useState<'gemini' | 'openai'>(
+    (localStorage.getItem('llm_provider') as 'gemini' | 'openai') || 'gemini'
+  );
+  const [selectedModel, setSelectedModel] = useState<string>(
+    localStorage.getItem('llm_model') || 'gpt-4o'
+  );
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     fetchAnnouncements();
@@ -129,7 +138,7 @@ const App: React.FC = () => {
     setParsingStatus('문서에서 텍스트를 추출하는 중...');
     setCurrentStep(1);
     setProgressCount(0);
-    setProgressTotal(expectedCount || 0);
+    setProgressTotal(expectedCount ? parseInt(expectedCount) : 0);
 
     const jobId = Math.random().toString(36).substring(7);
     
@@ -141,7 +150,36 @@ const App: React.FC = () => {
         if (res.data.total > 0) setProgressTotal(res.data.total);
         if (res.data.model) setActiveModel(res.data.model);
         if (res.data.key_idx !== undefined) setActiveKeyIdx(res.data.key_idx);
+        if (res.data.provider) setActiveProvider(res.data.provider);
         
+        if (res.data.error) {
+          setError(`분석 중 오류 발생: ${res.data.error}`);
+          clearInterval(pollInterval);
+          setUploading(false);
+          setParsingStatus('');
+          setCurrentStep(0);
+          return;
+        }
+
+        if (res.data.result) {
+          clearInterval(pollInterval);
+          setPreviewData({
+            title: res.data.result.announcement_title,
+            desc: res.data.result.announcement_description,
+            houses: res.data.result.houses
+          });
+          setUploading(false);
+          setPendingFiles(null);
+          setParsingStatus('');
+          setCurrentStep(0);
+          setProgressCount(0);
+          setProgressTotal(0);
+        } else if (res.data.partial_result && res.data.partial_result.length > 0) {
+          // Show last found house as a hint
+          const lastHouse = res.data.partial_result[res.data.partial_result.length - 1];
+          setParsingStatus(`최근 발견: ${lastHouse.name || '알 수 없음'} (${res.data.count}건)`);
+        }
+
         if (res.data.step && res.data.step.includes('QUOTA')) {
           setParsingStatus(`할당량 초과로 모델/키를 변경하여 분석 중...`);
         }
@@ -151,12 +189,9 @@ const App: React.FC = () => {
     }, 3000);
     
     const formData = new FormData();
-    Array.from(pendingFiles).forEach(file => {
-      formData.append('files', file);
-    });
-    if (expectedCount) formData.append('expected_count', expectedCount.toString());
+    // Only upload the first file since the updated routes.py takes one "file"
+    formData.append('file', pendingFiles[0]);
     if (userApiKey) {
-      formData.append('gemini_key', userApiKey);
       localStorage.setItem('gemini_api_key', userApiKey);
     }
     
@@ -165,33 +200,24 @@ const App: React.FC = () => {
         setParsingStatus('AI가 단지별 상세 정보를 구조화하고 있습니다 (2~3분 소요)...');
       }, 1500);
 
-      setTimeout(() => {
-        if (expectedCount) {
-          setParsingStatus(`데이터 개수 검증 및 재시도 판단 중...`);
-          setCurrentStep(2);
+      await axios.post('/api/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'x-job-id': jobId,
+          'x-gemini-key': userApiKey,
+          'x-provider': selectedProvider,
+          'x-model': selectedModel || undefined
         }
-      }, 10000);
-      
-      const res = await axios.post('/api/upload', formData, {
-        headers: { 'x-job-id': jobId }
       });
       
-      setPreviewData({
-        title: res.data.announcement_title,
-        desc: res.data.announcement_description,
-        houses: res.data.houses
-      });
       setIsDrawerOpen(false);
     } catch (err) {
-      setError('분석 중 오류가 발생했습니다. (API 할당량 초과일 수 있습니다)');
-    } finally {
+      console.error(err);
+      setError('분석 시작 중 오류가 발생했습니다.');
       clearInterval(pollInterval);
       setUploading(false);
-      setPendingFiles(null);
       setParsingStatus('');
       setCurrentStep(0);
-      setProgressCount(0);
-      setProgressTotal(0);
     }
   };
 
@@ -214,14 +240,24 @@ const App: React.FC = () => {
       });
       setPreviewData(null);
       await fetchAnnouncements();
-      setError(null);
     } catch (err) {
-      setError('저장 중 오류가 발생했습니다.');
+      console.error(err);
+      setError('초기화 중 오류가 발생했습니다.');
     } finally {
       setUploading(false);
       setParsingStatus('');
       setCurrentStep(0);
     }
+  };
+
+  const updateProvider = (p: 'gemini' | 'openai') => {
+    setSelectedProvider(p);
+    localStorage.setItem('llm_provider', p);
+  };
+
+  const updateModel = (m: string) => {
+    setSelectedModel(m);
+    localStorage.setItem('llm_model', m);
   };
 
   const filteredHouses = detail?.filter(h => 
@@ -401,6 +437,84 @@ const App: React.FC = () => {
             <Menu className="w-6 h-6" />
           </button>
         )}
+
+        <div className="absolute top-6 right-6 z-40 flex items-center gap-3 animate-in fade-in slide-in-from-right-4">
+          <div className="relative">
+              <button 
+                onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+                className={`p-2 rounded-xl border transition-all duration-200 flex items-center gap-2 ${
+                  isSettingsOpen 
+                    ? 'bg-indigo-50 border-indigo-200 text-indigo-600' 
+                    : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                }`}
+              >
+                <div className={`w-2 h-2 rounded-full ${selectedProvider === 'openai' ? 'bg-orange-500' : 'bg-emerald-500'}`} />
+                <span className="text-xs font-bold uppercase tracking-wider">
+                  {selectedProvider === 'openai' ? 'GPT-4O' : 'Gemini'}
+                </span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-300 ${isSettingsOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isSettingsOpen && (
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-slate-200 p-2 z-50 animate-in fade-in zoom-in-95 duration-200">
+                  <div className="p-2 mb-1">
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">LLM Provider</h4>
+                  </div>
+                  <div className="space-y-1">
+                    <button 
+                      onClick={() => { updateProvider('gemini'); setIsSettingsOpen(false); }}
+                      className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-colors ${selectedProvider === 'gemini' ? 'bg-emerald-50 text-emerald-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        <span className="text-sm">Gemini (Default)</span>
+                      </div>
+                      {selectedProvider === 'gemini' && <Check className="w-4 h-4" />}
+                    </button>
+                    <button 
+                      onClick={() => { updateProvider('openai'); setIsSettingsOpen(false); }}
+                      className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-colors ${selectedProvider === 'openai' ? 'bg-orange-50 text-orange-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                        <span className="text-sm">OpenAI (GPT-4o)</span>
+                      </div>
+                      {selectedProvider === 'openai' && <Check className="w-4 h-4" />}
+                    </button>
+                  </div>
+
+                  {selectedProvider === 'openai' && (
+                    <>
+                      <div className="h-px bg-slate-100 my-2" />
+                      <div className="p-2 mb-1">
+                        <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">GPT Model</h4>
+                      </div>
+                      <div className="space-y-1">
+                        {['gpt-4o', 'gpt-4o-mini'].map(m => (
+                          <button 
+                            key={m}
+                            onClick={() => { updateModel(m); setIsSettingsOpen(false); }}
+                            className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-colors ${selectedModel === m ? 'bg-orange-50 text-orange-700 font-bold' : 'hover:bg-slate-50 text-slate-600'}`}
+                          >
+                            <span className="text-sm uppercase tracking-tighter">{m}</span>
+                            {selectedModel === m && <Check className="w-4 h-4" />}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+          <button
+            onClick={() => setIsDrawerOpen(true)}
+            className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all duration-300 shadow-lg shadow-indigo-200 active:scale-95"
+          >
+            <Upload className="w-4 h-4" />
+            <span>새 공고 분석</span>
+          </button>
+        </div>
 
         <div className="w-full h-full">
           <MapView houses={detail || []} selectedHouseId={selectedHouseId} />
@@ -621,6 +735,46 @@ const App: React.FC = () => {
                 <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-1">예상 주택 개수 (선택)</label>
                 <input type="number" placeholder="예: 261" className="w-full px-5 py-3 bg-slate-100 border-none rounded-2xl text-lg font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all" value={expectedCount} onChange={(e) => setExpectedCount(e.target.value)} />
               </div>
+
+              <div className="h-px bg-slate-100 my-2" />
+              
+              <div>
+                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-1">LLM 공급자</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button 
+                    onClick={() => updateProvider('gemini')}
+                    className={`px-4 py-2.5 rounded-xl border-2 transition-all flex items-center justify-center gap-2 ${selectedProvider === 'gemini' ? 'bg-emerald-50 border-emerald-500 text-emerald-700 font-bold' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'}`}
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    <span className="text-sm">Gemini</span>
+                  </button>
+                  <button 
+                    onClick={() => updateProvider('openai')}
+                    className={`px-4 py-2.5 rounded-xl border-2 transition-all flex items-center justify-center gap-2 ${selectedProvider === 'openai' ? 'bg-orange-50 border-orange-500 text-orange-700 font-bold' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'}`}
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+                    <span className="text-sm">OpenAI</span>
+                  </button>
+                </div>
+              </div>
+
+              {selectedProvider === 'openai' && (
+                <div className="animate-in slide-in-from-top-2 duration-300">
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-1">GPT 모델 선택</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['gpt-4o', 'gpt-4o-mini'].map(m => (
+                      <button 
+                        key={m}
+                        onClick={() => updateModel(m)}
+                        className={`px-3 py-2 rounded-xl border-2 transition-all text-xs font-bold uppercase tracking-tighter ${selectedModel === m ? 'bg-orange-50 border-orange-500 text-orange-700' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'}`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setIsConfirmingUpload(false)} className="flex-1 px-5 py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl">취소</button>
                 <button onClick={onFileUpload} className="flex-1 px-5 py-3 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 shadow-lg">분석 시작</button>
@@ -720,8 +874,12 @@ const App: React.FC = () => {
                 <div className="flex flex-col items-center gap-1 animate-in slide-in-from-bottom-2 duration-500">
                   <div className="text-[10px] font-bold text-slate-400 mb-0.5 flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100">
                     <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                    <span className="uppercase tracking-tighter">{activeModel || 'Gemini'}</span> 
-                    {activeKeyIdx >= 0 && (
+                    <span className="uppercase tracking-tighter">
+                      {activeProvider === 'openai' ? 'OpenAI' : 'Gemini'}
+                    </span> 
+                    <span className="mx-1 opacity-20">|</span>
+                    <span className="uppercase tracking-tighter text-slate-500">{activeModel || 'FLASH'}</span>
+                    {activeProvider === 'gemini' && activeKeyIdx >= 0 && (
                       <span className="ml-1 px-1.5 py-0.5 bg-indigo-100/50 text-indigo-600 rounded-md font-black text-[8px] border border-indigo-200/50">
                         KEY #{activeKeyIdx + 1}
                       </span>
