@@ -125,7 +125,7 @@ async def upload_file(
                 message = data
                 try:
                     print(f"Calling Geo Agent for {message.get('name')}...")
-                    response = await client.post(GEO_AGENT_URL, json=message, timeout=10.0)
+                    response = await client.post(GEO_AGENT_URL, json=message, timeout=30.0)
                     if response.status_code == 200:
                         published_count += 1
                         print(f"Successfully called Geo Agent for {message.get('name')}")
