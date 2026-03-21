@@ -197,7 +197,6 @@ class LLMService:
 
         while retry_count < max_retries:
             all_houses = []
-            seen_keys = set()
             
             for idx, chunk_text in enumerate(chunks):
                 print(f"Processing Chunk {idx+1}/{len(chunks)} (Attempt {retry_count+1})...")
@@ -278,11 +277,8 @@ class LLMService:
                         parsed = json.loads(response_text)
                         houses = parsed.get("houses", [])
                         
-                        for h in houses:
-                            h_key = f"{h.get('name')}-{h.get('address')}-{h.get('house_type')}-{h.get('deposit')}"
-                            if h_key not in seen_keys:
-                                all_houses.append(h)
-                                seen_keys.add(h_key)
+                        # Add all found houses (No more across-chunk deduplication as we have no overlap)
+                        all_houses.extend(houses)
                         
                         if not final_title: final_title = parsed.get("announcement_title", "")
                         
@@ -374,7 +370,8 @@ class LLMService:
             try:
                 house_identity = f"{final_title}|{item.get('name')}|{item.get('address')}|{item.get('house_type')}|{item.get('deposit')}"
                 stable_id = hashlib.md5(house_identity.encode()).hexdigest()
-                item["id"] = f"h-{stable_id}"
+                # Append index to prevent ID collisions for identical units in the same building
+                item["id"] = f"h-{stable_id}-{index}"
                 valid_houses.append(ParsedHousingData(**item).model_dump())
             except Exception as e:
                 pass
