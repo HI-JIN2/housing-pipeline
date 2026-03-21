@@ -8,33 +8,62 @@ from services.mongo_service import MongoService
 
 class LLMService:
     def __init__(self):
-        self.api_key = os.getenv("GEMINI_API_KEY")
-        if not self.api_key or self.api_key == "your_gemini_api_key_here":
-            print("Warning: GEMINI_API_KEY is not set properly.")
+        # Collect all available Gemini API keys from environment
+        self.api_keys = []
+        for i in range(10): # Look for GEMINI_API_KEY, GEMINI_API_KEY1, ..., GEMINI_API_KEY9
+            key_name = "GEMINI_API_KEY" if i == 0 else f"GEMINI_API_KEY{i}"
+            val = os.getenv(key_name)
+            if val and val != "your_gemini_api_key_here":
+                self.api_keys.append(val)
         
-        # Models to cycle through if quota is hit
-        # Adding 'models/' prefix explicitly for v1/v1beta compatibility
+        if not self.api_keys:
+            print("Warning: No GEMINI_API_KEY found in environment.")
+            # Fallback to an empty list or a placeholder if needed, 
+            # but parse_housing_data will check again.
+        
+        self.current_key_idx = 0
+        
+        # Models to cycle through
         self.available_models = ["models/gemini-1.5-flash", "models/gemini-2.0-flash-exp", "models/gemini-1.5-flash-8b"]
         self.current_model_idx = 0
-        self.model = genai.GenerativeModel(self.available_models[self.current_model_idx])
+        
+        # Initial config
+        if self.api_keys:
+            genai.configure(api_key=self.api_keys[self.current_key_idx])
+            self.model = genai.GenerativeModel(self.available_models[self.current_model_idx])
         
         self.mongo_service = MongoService()
 
     def _switch_model(self):
-        # Move to next model
         self.current_model_idx = (self.current_model_idx + 1) % len(self.available_models)
         model_name = self.available_models[self.current_model_idx]
         print(f"🔄 Switching model to: {model_name}")
         self.model = genai.GenerativeModel(model_name)
         return model_name
 
+    def _switch_key(self):
+        if not self.api_keys or len(self.api_keys) <= 1:
+            print("⚠️ No more keys to switch to.")
+            return False
+            
+        self.current_key_idx = (self.current_key_idx + 1) % len(self.api_keys)
+        new_key = self.api_keys[self.current_key_idx]
+        print(f"🔑 Switching API Key to index {self.current_key_idx} (Ends in ...{new_key[-4:]})")
+        genai.configure(api_key=new_key)
+        # Reset model point to start with the best model on the new key
+        self.current_model_idx = 0
+        self.model = genai.GenerativeModel(self.available_models[0])
+        return True
+
     async def parse_housing_data(self, text: str, api_key: str = None, expected_count: Optional[int] = None, job_id: str = None):
-        current_api_key = api_key or self.api_key
-        if not current_api_key or current_api_key == "your_gemini_api_key_here":
-            raise ValueError("Gemini API key is not set. Please provide it in the UI or .env file.")
-        
-        # Configure once
-        genai.configure(api_key=current_api_key)
+        # If UI provided a key, use it as primary. Otherwise use our cycled keys.
+        if api_key:
+             genai.configure(api_key=api_key)
+             # If UI key is used, we don't cycle our internal list for this request
+        elif self.api_keys:
+             genai.configure(api_key=self.api_keys[self.current_key_idx])
+        else:
+             raise ValueError("No Gemini API key available.")
         
         text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
         
@@ -50,7 +79,8 @@ class LLMService:
                             "step": step, 
                             "total": expected_count, 
                             "hash": text_hash,
-                            "model": current_model
+                            "model": current_model,
+                            "key_idx": self.current_key_idx if not api_key else -1
                         }},
                         upsert=True
                     )
@@ -166,7 +196,13 @@ class LLMService:
                         if "404" in error_msg:
                             model_switch_count += 1
                             if model_switch_count >= max_switches:
-                                print(f"All models returned 404 for chunk {idx+1}. Skipping chunk.")
+                                # Try switching API keys before giving up
+                                if self._switch_key():
+                                    model_switch_count = 0 
+                                    await update_status(len(all_houses), f"KEY_SWITCHED")
+                                    continue
+                                
+                                print(f"All models & keys returned 404 for chunk {idx+1}. Skipping.")
                                 await update_status(len(all_houses), f"ERROR_ALL_MODELS_404_CHUNK_{idx+1}")
                                 break
                                 
@@ -178,12 +214,19 @@ class LLMService:
 
                         # Case 2: Rate limit or Quota (429)
                         if "429" in error_msg:
-                            # If it's a quota/limit error, try switching models
+                            # If it's a quota/limit error, try switching models/keys
                             if "quota" in error_msg or "limit" in error_msg or "exceeded" in error_msg:
+                                model_switch_count += 1
+                                if model_switch_count >= max_switches:
+                                    if self._switch_key():
+                                        model_switch_count = 0
+                                        await update_status(len(all_houses), f"KEY_SWITCHED_DUE_TO_QUOTA")
+                                        continue
+                                    
                                 new_model = self._switch_model()
                                 print(f"Quota exceeded. Switched to {new_model}")
                                 await update_status(len(all_houses), f"QUOTA_EXCEEDED_SWITCHING_TO_{new_model}")
-                                await asyncio.sleep(5) # Small cooldown
+                                await asyncio.sleep(5) 
                                 continue
                             
                             # General rate limit (RPM)
