@@ -1,4 +1,4 @@
-import google.generativeai as genai
+ㄹimport google.generativeai as genai
 from shared.models import ParsedHousingData
 from typing import List
 import os
@@ -36,38 +36,46 @@ class LLMService:
             print(f"Error reading mongo cache: {e}")
 
         prompt = f"""
-        다음은 주택청약 공고문 또는 주택 목록 PDF에서 추출한 텍스트입니다.
-        여기에서 각 주택(아파트/호실)의 정보를 추출하여 JSON 리스트 형태로 반환하세요.
-        반드시 지정된 JSON 스키마를 준수해야 합니다.
-        여러 개의 주택이 있다면 모두 추출해야 합니다.
+        You are an expert real estate data extraction agent. 
+        Your task is to extract structural information for EVERY housing unit/apartment mentioned in the provided text.
         
-        [JSON 모델 필드 설명]
-        - id: 고유 ID (공고명+순번 등으로 만들어주세요)
-        - name: 아파트/주택 이름 (예: OO아파트, 행복주택 등)
-        - address: 상세 주소
-        - house_type: 주택 유형 (예: 투룸, 59A, 84B 등)
-        - deposit: 보증금 (단위: 만원값 정수)
-        - monthly_rent: 월세 (단위: 만원값 정수, 없으면 0)
-        - raw_text_reference: 이 결과를 도출해낸 원문 내용 일부
+        [CRITICAL INSTRUCTIONS]
+        1. **Completeness**: Do not skip any items. If there are hundreds of items in a table, extract all of them.
+        2. **Accuracy**: Ensure the address, deposit, and rent are captured exactly as they appear.
+        3. **Context**: If the text is from a table, map the headers correctly to the fields.
+        4. **Handling Units**: 
+           - Deposit and Monthly Rent should be in 'ten thousand KRW' (만원) units. 
+           - Example: 150,000,000 KRW -> 15000. 500,000 KRW -> 50.
         
-        [출력 형식]
-        반드시 다음과 같은 구조를 가진 JSON 텍스트 한 개만 출력하세요:
+        [JSON SCHEMA]
+        Extract each item into the following format:
+        - id: Unique ID (announcement name + index or similar)
+        - name: Apartment/Housing name (e.g., 'OO Apartment', 'Happy House')
+        - address: Full detailed address
+        - house_type: Housing type/size (e.g., 'Two-room', '59A', '84B', 'Exclusive 39m2')
+        - deposit: Security deposit (Integer, unit: 10,000 KRW)
+        - monthly_rent: Monthly rent (Integer, unit: 10,000 KRW, 0 if not applicable)
+        - raw_text_reference: A snippet of the original text from which this data was derived.
+        
+        [OUTPUT FORMAT]
+        Return ONLY a single valid JSON object:
         {{
             "houses": [
                 {{
-                    "id": "문자열",
-                    "name": "문자열",
-                    "address": "문자열",
-                    "house_type": "문자열",
+                    "id": "string",
+                    "name": "string",
+                    "address": "string",
+                    "house_type": "string",
                     "deposit": 10000,
                     "monthly_rent": 50,
-                    "raw_text_reference": "문자열"
-                }}
+                    "raw_text_reference": "string"
+                }},
+                ...
             ]
         }}
         
-        [텍스트]
-        {text[:15000]}
+        [TEXT TO PROCESS]
+        {text[:30000]}
         """
         
         try:
@@ -83,26 +91,33 @@ class LLMService:
             parsed = json.loads(content)
             
             results = []
+            title = parsed.get("announcement_title", "")
+            description = parsed.get("announcement_description", "")
+            
             if "houses" in parsed and isinstance(parsed["houses"], list):
                 results = parsed["houses"]
             else:
+                # Fallback for older formats or mis-formatted LLM output
                 for k, v in parsed.items():
                     if isinstance(v, list):
                         results.extend(v)
                         break
-                if not results and isinstance(parsed, dict) and "id" in parsed:
-                    results.append(parsed)
-                    
+            
             housing_list = [ParsedHousingData(**item) for item in results]
             
             # Save to MongoDB cache
+            cache_data = {
+                "announcement_title": title,
+                "announcement_description": description,
+                "houses": [item.model_dump() for item in housing_list]
+            }
             try:
-                await self.mongo_service.save_cache(text_hash, [item.model_dump() for item in housing_list])
+                await self.mongo_service.save_cache(text_hash, cache_data)
                 print(f"Saved results to MongoDB cache for hash {text_hash}")
             except Exception as e:
                 print(f"Error writing mongo cache: {e}")
                 
-            return housing_list
+            return cache_data
             
         except Exception as e:
             print(f"Error parsing LLM output: {e}")
