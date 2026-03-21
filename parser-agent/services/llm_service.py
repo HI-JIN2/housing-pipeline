@@ -4,6 +4,7 @@ from typing import List
 import os
 import json
 import hashlib
+from services.mongo_service import MongoService
 
 class LLMService:
     def __init__(self):
@@ -14,9 +15,7 @@ class LLMService:
         # Use gemini-flash-latest base alias to fix 404 error with v1beta
         self.model = genai.GenerativeModel("gemini-flash-latest")
         
-        # Cache directory
-        self.cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache")
-        os.makedirs(self.cache_dir, exist_ok=True)
+        self.mongo_service = MongoService()
 
     async def parse_housing_data(self, text: str, api_key: str = None) -> List[ParsedHousingData]:
         current_api_key = api_key or self.api_key
@@ -27,16 +26,14 @@ class LLMService:
         genai.configure(api_key=current_api_key)
         
         text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
-        cache_file = os.path.join(self.cache_dir, f"{text_hash}.json")
         
-        if os.path.exists(cache_file):
-            try:
-                with open(cache_file, "r", encoding="utf-8") as f:
-                    cached_data = json.load(f)
-                print(f"Cache hit for hash {text_hash}")
+        try:
+            cached_data = await self.mongo_service.get_cache(text_hash)
+            if cached_data:
+                print(f"Cache hit from MongoDB for hash {text_hash}")
                 return [ParsedHousingData(**item) for item in cached_data]
-            except Exception as e:
-                print(f"Error reading cache: {e}")
+        except Exception as e:
+            print(f"Error reading mongo cache: {e}")
 
         prompt = f"""
         다음은 주택청약 공고문 또는 주택 목록 PDF에서 추출한 텍스트입니다.
@@ -98,13 +95,12 @@ class LLMService:
                     
             housing_list = [ParsedHousingData(**item) for item in results]
             
-            # Save to cache
+            # Save to MongoDB cache
             try:
-                with open(cache_file, "w", encoding="utf-8") as f:
-                    json.dump([item.model_dump() for item in housing_list], f, ensure_ascii=False, indent=2)
-                print(f"Saved results to cache: {cache_file}")
+                await self.mongo_service.save_cache(text_hash, [item.model_dump() for item in housing_list])
+                print(f"Saved results to MongoDB cache for hash {text_hash}")
             except Exception as e:
-                print(f"Error writing cache: {e}")
+                print(f"Error writing mongo cache: {e}")
                 
             return housing_list
             

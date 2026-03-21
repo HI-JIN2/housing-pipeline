@@ -28,12 +28,12 @@ async def main():
     error_count = 0
 
     async with db.pool.acquire() as conn:
-        with open(csv_path, mode='r', encoding='utf-8-sig') as f:
+        with open(csv_path, mode='r', encoding='euc-kr') as f:
             reader = csv.DictReader(f)
             for row in reader:
-                name = row.get('name')
-                lat = row.get('lat')
-                lng = row.get('lng')
+                name = row.get('역명')
+                lat = row.get('위도')
+                lng = row.get('경도')
 
                 if not name or not lat or not lng:
                     print(f"Skipping invalid row: {row}")

@@ -3,6 +3,7 @@ from typing import Optional
 from services.pdf_service import PDFService
 from services.excel_service import ExcelService
 from services.llm_service import LLMService
+from services.mongo_service import MongoService
 import uuid
 import sys
 import os
@@ -12,6 +13,7 @@ from main import kafka_producer
 
 router = APIRouter()
 llm_service = LLMService()
+mongo_service = MongoService()
 
 @router.get("/config")
 def get_config():
@@ -48,6 +50,13 @@ async def upload_file(files: list[UploadFile] = File(...), gemini_key: Optional[
                 parsed_data = await llm_service.parse_housing_data(extracted_text, api_key=gemini_key)
                 if parsed_data:
                     housing_data_list.extend(parsed_data)
+                    
+                    # Store full announcement for future flexibility
+                    await mongo_service.save_announcement({
+                        "filename": filename,
+                        "raw_text": extracted_text,
+                        "parsed_houses": [d.model_dump() for d in parsed_data]
+                    })
             except ValueError as ve:
                 raise HTTPException(status_code=400, detail=str(ve))
 
