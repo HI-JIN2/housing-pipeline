@@ -57,6 +57,7 @@ const App: React.FC = () => {
   const [userApiKey, setUserApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
   const [isCoffeeOpen, setIsCoffeeOpen] = useState(false);
   const [parsingStatus, setParsingStatus] = useState<string>('');
+  const [currentStep, setCurrentStep] = useState<number>(0);
 
   useEffect(() => {
     fetchAnnouncements();
@@ -122,6 +123,7 @@ const App: React.FC = () => {
     setUploading(true);
     setIsConfirmingUpload(false);
     setParsingStatus('문서에서 텍스트를 추출하는 중...');
+    setCurrentStep(1);
     
     const formData = new FormData();
     Array.from(pendingFiles).forEach(file => {
@@ -134,8 +136,16 @@ const App: React.FC = () => {
     }
     
     try {
-      // Small artificial delay to show status
-      setTimeout(() => setParsingStatus('AI가 단지별 상세 정보를 구조화하고 있습니다 (2~3분 소요)...'), 1500);
+      setTimeout(() => {
+        setParsingStatus('AI가 단지별 상세 정보를 구조화하고 있습니다 (2~3분 소요)...');
+      }, 1500);
+
+      setTimeout(() => {
+        if (expectedCount) {
+          setParsingStatus(`데이터 개수 검증 중 (예상: ${expectedCount}건)...`);
+          setCurrentStep(2);
+        }
+      }, 5000);
       
       const res = await axios.post('/api/upload', formData);
       setPreviewData({
@@ -150,15 +160,22 @@ const App: React.FC = () => {
       setUploading(false);
       setPendingFiles(null);
       setParsingStatus('');
+      setCurrentStep(0);
     }
   };
 
   const onFinalSave = async () => {
     if (!previewData) return;
     setUploading(true);
-    setParsingStatus('카카오 맵 API를 통해 좌표를 추출하고 주변 역을 찾는 중...');
+    setParsingStatus('카카오 맵 API를 통해 좌표를 추출하는 중...');
+    setCurrentStep(3);
     
     try {
+      setTimeout(() => {
+        setParsingStatus('인접 지하철역 도보 거리를 계산하고 있습니다...');
+        setCurrentStep(4);
+      }, 3000);
+
       await axios.post('/api/save', {
         announcement_title: previewData.title,
         announcement_description: previewData.desc,
@@ -172,6 +189,7 @@ const App: React.FC = () => {
     } finally {
       setUploading(false);
       setParsingStatus('');
+      setCurrentStep(0);
     }
   };
 
@@ -617,15 +635,59 @@ const App: React.FC = () => {
 
       {/* 6. Global Loading Overlay */}
       {uploading && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[200] flex flex-col items-center justify-center animate-in fade-in duration-300">
-          <div className="bg-white/80 p-12 rounded-[3.5rem] shadow-2xl flex flex-col items-center gap-6 border border-white/50 max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[200] flex flex-col items-center justify-center animate-in fade-in duration-300 px-4">
+          <div className="bg-white/80 p-8 lg:p-12 rounded-[3.5rem] shadow-2xl flex flex-col items-center gap-8 border border-white/50 max-w-2xl w-full">
+            
             <div className="relative">
               <div className="w-20 h-20 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
               <Loader2 className="w-8 h-8 text-indigo-600 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
             </div>
+
+            <div className="w-full">
+              <div className="flex justify-between relative">
+                {/* Connector Line */}
+                <div className="absolute top-5 left-0 w-full h-0.5 bg-slate-100 -z-10" />
+                <div 
+                  className="absolute top-5 left-0 h-0.5 bg-indigo-600 transition-all duration-1000 -z-10" 
+                  style={{ width: `${Math.max(0, (currentStep - 1) * 33.33)}%` }}
+                />
+
+                {[
+                  { id: 1, label: 'AI 분석', icon: FileText },
+                  { id: 2, label: '개수 검증', icon: Search },
+                  { id: 3, label: '위치 추출', icon: MapPin },
+                  { id: 4, label: '거리 계산', icon: Layers },
+                ].map((step) => {
+                  const Icon = step.icon;
+                  const isActive = currentStep === step.id;
+                  const isCompleted = currentStep > step.id;
+                  
+                  return (
+                    <div key={step.id} className="flex flex-col items-center gap-3 relative bg-white/0 px-2">
+                       <div className={cn(
+                        "w-10 h-10 rounded-full flex items-center justify-center transition-all duration-500 border-2",
+                        isActive ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-200 scale-110" : 
+                        isCompleted ? "bg-emerald-500 border-emerald-500 text-white" : 
+                        "bg-white border-slate-200 text-slate-300"
+                      )}>
+                        {isCompleted ? <Plus className="w-5 h-5 rotate-45" /> : <Icon className="w-5 h-5" />}
+                      </div>
+                      <span className={cn(
+                        "text-[10px] font-black uppercase tracking-tighter transition-colors",
+                        isActive ? "text-indigo-600" : isCompleted ? "text-emerald-600" : "text-slate-400"
+                      )}>
+                        {step.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="text-center space-y-2">
-              <h3 className="text-xl font-black text-slate-800 tracking-tight">Processing...</h3>
-              <p className="text-sm font-bold text-indigo-600 animate-pulse px-4">{parsingStatus || '잠시만 기다려주세요...'}</p>
+              <p className="text-sm font-bold text-indigo-600 animate-pulse px-4 bg-indigo-50/50 py-2 rounded-2xl border border-indigo-100/50">
+                {parsingStatus || '잠시만 기다려주세요...'}
+              </p>
             </div>
           </div>
         </div>
