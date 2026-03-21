@@ -18,7 +18,8 @@ db_service = DBService()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Starting Parser Agent...")
-    await db_service.init_pool()
+    # Initialize DB in the background so the server starts listening immediately
+    asyncio.create_task(db_service.init_pool())
     yield
     print("Shutting down Parser Agent...")
     await db_service.close_pool()

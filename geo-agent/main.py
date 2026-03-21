@@ -15,7 +15,8 @@ from services.enrich_service import enrich_and_save, db_service
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Starting Geo Agent...")
-    await db_service.init_pool()
+    # Initialize DB in the background
+    asyncio.create_task(db_service.init_pool())
     yield
     print("Shutting down Geo Agent...")
     await db_service.close_pool()
