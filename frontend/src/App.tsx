@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Upload, FileText, ChevronRight, Loader2, AlertCircle, Home, MapPin, BadgeCent, Map as MapIcon, Layers } from 'lucide-react';
+import { 
+  Upload, FileText, ChevronRight, Loader2, AlertCircle, Home, 
+  MapPin, BadgeCent, Map as MapIcon, Layers, ChevronLeft, Search, Menu, X 
+} from 'lucide-react';
 import MapView from './components/KakaoMapView';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -26,10 +29,10 @@ interface House {
 
 interface Announcement {
   id: string;
+  filename: string;
   title: string;
   description: string;
   house_count: number;
-  filename: string;
 }
 
 const App: React.FC = () => {
@@ -39,260 +42,284 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasGeminiKey, setHasGeminiKey] = useState(true);
-  const [geminiInput, setGeminiInput] = useState('');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [selectedHouseId, setSelectedHouseId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    checkConfig();
     fetchAnnouncements();
   }, []);
-
-  const checkConfig = async () => {
-    try {
-      const res = await axios.get('/api/config');
-      setHasGeminiKey(res.data.has_gemini_key);
-    } catch (e) {
-      console.error(e);
-    }
-  };
 
   const fetchAnnouncements = async () => {
     try {
       const res = await axios.get('/api/announcements');
-      if (res.data.status === 'success') {
-        setAnnouncements(res.data.data);
-      }
-    } catch (e) {
-      setError('공고 목록을 불러오는데 실패했습니다.');
+      setAnnouncements(res.data);
+    } catch (err) {
+      console.error('Failed to fetch:', err);
     }
   };
 
-  const fetchDetail = async (id: string) => {
+  const loadDetail = async (id: string) => {
     setLoading(true);
-    setError(null);
+    setSelectedId(id);
+    setSelectedHouseId(null);
+    setIsDrawerOpen(false);
     try {
       const res = await axios.get(`/api/announcements/${id}`);
-      if (res.data.status === 'success') {
-        setDetail(res.data.data);
-        setSelectedId(id);
-      }
-    } catch (e) {
-      setError('상세 정보를 불러오는데 실패했습니다.');
+      setDetail(res.data.data);
+    } catch (err) {
+      setError('상세 정보를 불러오지 못했습니다.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    const formData = new FormData();
-    Array.from(files).forEach(f => formData.append('files', f));
-    if (geminiInput) {
-      formData.append('gemini_key', geminiInput);
-    }
-
+  const onFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.length) return;
+    
     setUploading(true);
-    setError(null);
+    const formData = new FormData();
+    Array.from(e.target.files).forEach(file => {
+      formData.append('files', file);
+    });
+    
     try {
-      const res = await axios.post('/api/upload', formData);
-      if (res.status === 200) {
-        await fetchAnnouncements();
-        // Automatically select the first one if successful
-        // Or just show success state
-      }
-    } catch (e: any) {
-      setError(e.response?.data?.detail || '업로드 중 오류가 발생했습니다.');
+      await axios.post('/api/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      await fetchAnnouncements();
+      setIsDrawerOpen(true); // Open drawer after upload to see the new entry
+    } catch (err) {
+      setError('업로드 중 오류가 발생했습니다.');
     } finally {
       setUploading(false);
     }
   };
 
+  const filteredHouses = detail?.filter(h => 
+    h.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    h.address.toLowerCase().includes(searchTerm.toLowerCase())
+  ) || [];
+
   return (
-    <div className="max-w-6xl mx-auto px-4 py-12">
-      <header className="text-center mb-12">
-        <h1 className="text-4xl font-extrabold bg-gradient-to-r from-indigo-600 to-pink-500 bg-clip-text text-transparent mb-2">
-          Housing Pipeline
-        </h1>
-        <p className="text-slate-500 text-lg">청약/매물 문서를 업로드하면 AI가 자동으로 구조화합니다.</p>
-      </header>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left Column: Upload & History */}
-        <div className="lg:col-span-5 space-y-6">
-          {/* Upload Area */}
-          <section className={cn(
-            "p-8 rounded-3xl border-2 border-dashed transition-all cursor-pointer bg-white/50 backdrop-blur-xl",
-            "hover:border-indigo-500 hover:bg-indigo-50/30 border-slate-200"
-          )}
-          onClick={() => document.getElementById('file-upload')?.click()}
+    <div className="flex h-screen w-screen overflow-hidden bg-slate-50 font-sans text-slate-900">
+      
+      {/* --- Sidebar (House List) --- */}
+      <aside className={cn(
+        "bg-white border-r border-slate-200 flex flex-col transition-all duration-300 z-30 shadow-xl",
+        isSidebarOpen ? "w-[400px]" : "w-0 -translate-x-full"
+      )}>
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
+              <Home className="w-5 h-5 text-white" />
+            </div>
+            <h1 className="text-xl font-bold tracking-tight">Housing <span className="text-indigo-600">Pipeline</span></h1>
+          </div>
+          <button 
+            onClick={() => setIsSidebarOpen(false)}
+            className="p-2 hover:bg-slate-100 rounded-lg lg:hidden"
           >
-            <input 
-              id="file-upload"
-              type="file" 
-              className="hidden" 
-              multiple 
-              accept=".pdf,.xlsx"
-              onChange={handleFileUpload}
-            />
-            <div className="flex flex-col items-center text-center">
-              <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center mb-4">
-                {uploading ? <Loader2 className="w-8 h-8 animate-spin" /> : <Upload className="w-8 h-8" />}
-              </div>
-              <h3 className="text-xl font-bold mb-1">문서 업로드</h3>
-              <p className="text-slate-500 text-sm">PDF, XLSX (최대 3개)</p>
-            </div>
-          </section>
-
-          {!hasGeminiKey && (
-            <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl">
-              <input 
-                type="password"
-                placeholder="Gemini API Key 입력"
-                className="w-full p-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-indigo-500"
-                value={geminiInput}
-                onChange={(e) => setGeminiInput(e.target.value)}
-              />
-            </div>
-          )}
-
-          {/* History List */}
-          <section className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-50 flex justify-between items-center">
-              <h2 className="font-bold text-slate-800">최근 분석된 공고</h2>
-              <span className="text-xs font-semibold px-2 py-1 bg-slate-100 text-slate-500 rounded-lg">{announcements.length}</span>
-            </div>
-            <ul className="divide-y divide-slate-50 max-h-[500px] overflow-y-auto">
-              {announcements.map((item) => (
-                <li 
-                  key={item.id}
-                  className={cn(
-                    "px-6 py-4 cursor-pointer transition-colors flex items-center justify-between group",
-                    selectedId === item.id ? "bg-indigo-50" : "hover:bg-slate-50"
-                  )}
-                  onClick={() => fetchDetail(item.id)}
-                >
-                  <div className="flex-1 min-w-0 pr-4">
-                    <h4 className={cn(
-                      "font-semibold truncate",
-                      selectedId === item.id ? "text-indigo-700" : "text-slate-700"
-                    )}>
-                      {item.title}
-                    </h4>
-                    <p className="text-xs text-slate-400 truncate">{item.description || item.filename}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md">
-                      {item.house_count}호
-                    </span>
-                    <ChevronRight className={cn(
-                      "w-4 h-4 transition-transform",
-                      selectedId === item.id ? "text-indigo-500 translate-x-1" : "text-slate-300"
-                    )} />
-                  </div>
-                </li>
-              ))}
-              {announcements.length === 0 && (
-                <li className="px-6 py-12 text-center text-slate-400 italic">표시할 공고가 없습니다.</li>
-              )}
-            </ul>
-          </section>
-        </div>
-
-        {/* Right Column: Detail View */}
-        <div className="lg:col-span-7">
-          <section className="bg-white rounded-3xl shadow-xl border border-slate-100 min-h-[600px] flex flex-col">
-            {loading ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
-                <Loader2 className="w-10 h-10 animate-spin mb-4" />
-                <p>데이터를 불러오고 있습니다...</p>
-              </div>
-            ) : detail ? (
-              <>
-                <div className="px-8 py-6 border-b border-slate-50 bg-slate-50/50 rounded-t-3xl">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded-md text-[10px] font-bold uppercase tracking-wider">Analysis Result</span>
-                    <div className="flex items-center gap-1 text-[10px] text-slate-400 font-bold uppercase">
-                      <MapIcon className="w-3 h-3" /> {detail.filter(h => h.lat).length} Markers
-                    </div>
-                  </div>
-                  <h2 className="text-2xl font-bold text-slate-800">
-                    {announcements.find(a => a.id === selectedId)?.title}
-                  </h2>
-                  
-                  {/* Map View Integration */}
-                  <MapView houses={detail} />
-                </div>
-                
-                <div className="flex-1 p-8 space-y-6 overflow-y-auto max-h-[600px]">
-                  {detail.map((house, idx) => (
-                    <div key={idx} className="p-6 rounded-2xl border border-slate-100 bg-white hover:border-indigo-200 transition-all shadow-sm hover:shadow-md">
-                      <div className="flex justify-between items-start mb-4">
-                        <h3 className="text-xl font-bold text-slate-800">{house.name}</h3>
-                        <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold">{house.house_type}</span>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                        <div className="flex items-start gap-3">
-                          <MapPin className="w-5 h-5 text-slate-400 shrink-0" />
-                          <div>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase">Address</p>
-                            <p className="text-sm text-slate-600">{house.address}</p>
-                            {house.nearest_station && (
-                              <div className="flex items-center gap-1 mt-1">
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded flex items-center gap-0.5">
-                                  <Layers className="w-2 h-2" /> {house.nearest_station}역
-                                </span>
-                                <span className="text-[10px] text-slate-400 font-medium">
-                                  도보 {house.walking_time_mins}분 ({house.distance_meters}m)
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-3">
-                          <BadgeCent className="w-5 h-5 text-slate-400 shrink-0" />
-                          <div>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase">Financials</p>
-                            <p className="text-sm text-slate-600 font-semibold">
-                              보증금 {house.deposit.toLocaleString()} / 월세 {house.monthly_rent.toLocaleString()} (만원)
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="p-4 bg-slate-50 rounded-xl">
-                        <p className="text-[10px] font-bold text-slate-400 mb-2 uppercase flex items-center gap-1">
-                          <FileText className="w-3 h-3" /> Raw Reference
-                        </p>
-                        <p className="text-xs text-slate-500 whitespace-pre-wrap leading-relaxed">{house.raw_text_reference}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-slate-300 p-12 text-center">
-                <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6">
-                  <Home className="w-10 h-10" />
-                </div>
-                <h3 className="text-xl font-bold text-slate-400 mb-2">공고를 선택해 주세요</h3>
-                <p className="text-sm max-w-[280px]">왼쪽 목록에서 공고를 선택하면 상세 분석 내용을 여기서 확인할 수 있습니다.</p>
-              </div>
-            )}
-          </section>
-        </div>
-      </div>
-
-      {error && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-red-500 text-white px-6 py-3 rounded-2xl shadow-2xl animate-in fade-in slide-in-from-bottom-4">
-          <AlertCircle className="w-5 h-5" />
-          <span className="font-medium text-sm">{error}</span>
-          <button onClick={() => setError(null)} className="ml-4 hover:opacity-70 transition-opacity">
-            <ChevronRight className="w-4 h-4 rotate-90" />
+            <ChevronLeft className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Search & Stats */}
+        <div className="p-4 border-b border-slate-50 space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input 
+              type="text"
+              placeholder="주택 이름 또는 주소 검색..."
+              className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 transition-all outline-none"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          {detail && (
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                {searchTerm ? `검색 결과 ${filteredHouses.length}건` : `총 ${detail.length}호실`}
+              </span>
+              <div className="flex gap-1">
+                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[10px] font-bold uppercase transition-colors">
+                  {filteredHouses.filter(h => h.lat).length} Geocoded
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* House List Scroll Area */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+          {!detail ? (
+            <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60 px-8 text-center mt-10">
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                <FileText className="w-8 h-8" />
+              </div>
+              <p className="text-sm font-medium">상단 메뉴에서 공고를 선택하거나<br/>새로운 파일을 업로드해주세요.</p>
+            </div>
+          ) : filteredHouses.length === 0 ? (
+            <div className="text-center py-10 text-slate-400 text-sm">검색 결과가 없습니다.</div>
+          ) : (
+            filteredHouses.map((house) => (
+              <div 
+                key={house.id}
+                onClick={() => setSelectedHouseId(house.id)}
+                className={cn(
+                  "p-4 rounded-2xl border transition-all cursor-pointer group",
+                  selectedHouseId === house.id 
+                    ? "bg-indigo-50 border-indigo-200 shadow-sm"
+                    : "bg-white border-slate-100 hover:border-indigo-100 hover:shadow-md"
+                )}
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className={cn(
+                    "font-bold text-slate-800 transition-colors",
+                    selectedHouseId === house.id ? "text-indigo-700" : "group-hover:text-indigo-600"
+                  )}>{house.name}</h3>
+                  <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px] font-bold">{house.house_type}</span>
+                </div>
+                
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2">
+                    <MapPin className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-xs text-slate-500 leading-snug">{house.address}</p>
+                      {house.nearest_station && (
+                        <div className="flex items-center gap-1 mt-1">
+                          <span className="text-[10px] font-bold px-1 py-0.5 bg-emerald-50 text-emerald-600 rounded flex items-center gap-0.5">
+                            <Layers className="w-2.5 h-2.5" /> {house.nearest_station}역
+                          </span>
+                          <span className="text-[10px] text-slate-400">도보 {house.walking_time_mins}분</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <BadgeCent className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <p className="text-xs font-semibold text-indigo-600">
+                      보증금 {house.deposit.toLocaleString()} / 월 {house.monthly_rent.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </aside>
+
+      {/* --- Main Content Area --- */}
+      <main className="flex-1 flex flex-col relative">
+        
+        {/* Floating Header */}
+        <header className="absolute top-4 left-4 right-4 z-20 flex items-center justify-between pointer-events-none">
+          <div className="flex items-center gap-2 pointer-events-auto">
+            {!isSidebarOpen && (
+              <button 
+                onClick={() => setIsSidebarOpen(true)}
+                className="p-3 bg-white shadow-lg border border-slate-100 rounded-2xl hover:bg-slate-50 text-slate-600 transition-all hover:scale-105 active:scale-95"
+              >
+                <Menu className="w-6 h-6" />
+              </button>
+            )}
+            
+            <div className="bg-white/80 backdrop-blur-md px-5 py-3 shadow-lg border border-white/50 rounded-2xl flex items-center gap-4">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Current Project</span>
+                <span className="text-sm font-bold text-slate-800 truncate max-w-[200px]">
+                  {selectedId ? announcements.find(a => a.id === selectedId)?.title : '공고를 선택해주세요'}
+                </span>
+              </div>
+              <button 
+                onClick={() => setIsDrawerOpen(true)}
+                className="px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition-all active:scale-95 flex items-center gap-2"
+              >
+                <ChevronRight className="w-3.5 h-3.5" /> Change
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 pointer-events-auto">
+            <label className={cn(
+              "px-5 py-3 bg-indigo-600 text-white shadow-lg shadow-indigo-200 rounded-2xl font-bold text-sm cursor-pointer hover:bg-indigo-700 transition-all flex items-center gap-3 active:scale-95",
+              uploading && "opacity-80 pointer-events-none"
+            )}>
+              {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
+              <span>{uploading ? 'Parsing...' : 'New Announcement'}</span>
+              <input type="file" multiple className="hidden" onChange={onFileUpload} disabled={uploading} />
+            </label>
+          </div>
+        </header>
+
+        {/* Full-screen Map */}
+        <div className="w-full h-full bg-slate-200">
+          <MapView houses={detail || []} selectedHouseId={selectedHouseId} />
+        </div>
+
+        {/* Global Error Alert */}
+        {error && (
+          <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-red-50 border border-red-100 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 z-[60] animate-in slide-in-from-bottom">
+            <AlertCircle className="w-5 h-5 text-red-500" />
+            <p className="text-sm font-bold text-red-700">{error}</p>
+            <button onClick={() => setError(null)} className="ml-4 p-1 hover:bg-red-100 rounded-full transition-colors">
+              <X className="w-4 h-4 text-red-400" />
+            </button>
+          </div>
+        )}
+      </main>
+
+      {/* --- Overlay Drawer for Announcements --- */}
+      {isDrawerOpen && (
+        <>
+          <div 
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 animate-in fade-in"
+            onClick={() => setIsDrawerOpen(false)}
+          />
+          <div className="fixed top-0 bottom-0 right-0 w-[400px] bg-white shadow-2xl z-50 animate-in slide-in-from-right duration-500 border-l border-slate-100 flex flex-col">
+            <div className="p-8 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-black text-slate-800 tracking-tight">Announcements</h2>
+                <p className="text-sm text-slate-400 mt-1 font-medium">분석된 공고 내역입니다.</p>
+              </div>
+              <button 
+                onClick={() => setIsDrawerOpen(false)}
+                className="p-3 hover:bg-slate-100 rounded-2xl transition-colors"
+              >
+                <X className="w-6 h-6 text-slate-400" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {announcements.map((a) => (
+                <div 
+                  key={a.id}
+                  onClick={() => loadDetail(a.id)}
+                  className={cn(
+                    "p-6 rounded-3xl border transition-all cursor-pointer group",
+                    selectedId === a.id 
+                      ? "bg-indigo-50 border-indigo-200 shadow-sm"
+                      : "bg-white border-slate-100 hover:border-indigo-100 hover:shadow-xl"
+                  )}
+                >
+                  <div className="flex items-center gap-1 mb-2">
+                    <span className="px-2 py-0.5 bg-indigo-100 text-indigo-600 rounded text-[10px] font-black uppercase tracking-wider">
+                      {a.house_count} items
+                    </span>
+                  </div>
+                  <h3 className={cn(
+                    "text-lg font-black text-slate-800 leading-tight mb-2 group-hover:text-indigo-600 transition-colors",
+                    selectedId === a.id && "text-indigo-700"
+                  )}>{a.title}</h3>
+                  <div className="flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-tighter">
+                    <FileText className="w-3.5 h-3.5" /> {a.filename}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
       )}
 
       {/* Retro-style Button for Kakao Pay (Maintaining previous functionality) */}
@@ -309,6 +336,23 @@ const App: React.FC = () => {
           onError={(e) => (e.currentTarget.style.display = 'none')}
         />
       </a>
+
+      {/* Global CSS for scrollbar */}
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #e2e8f0;
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #cbd5e1;
+        }
+      `}</style>
     </div>
   );
 };
