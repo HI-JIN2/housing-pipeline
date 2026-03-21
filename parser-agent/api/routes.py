@@ -18,6 +18,11 @@ def ping():
     return {"status": "pong", "message": "API server is reachable"}
 
 GEO_AGENT_URL = os.getenv("GEO_AGENT_URL", "http://localhost:8001/api/enrich")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "momstouch18!")
+
+def verify_admin(x_admin_password: Optional[str] = Header(None)):
+    if x_admin_password != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Unauthorized: Admin password required or incorrect.")
 
 @router.get("/config")
 def get_config():
@@ -68,11 +73,13 @@ async def upload_files(
     x_job_id: str = Header(None),
     x_gemini_key: str = Header(None),
     x_provider: str = Header("gemini"),
-    x_model: str = Header(None)
+    x_model: str = Header(None),
+    x_admin_password: Optional[str] = Header(None)
 ):
     """
     고시공고 PDF 또는 엑셀 파일을 업로드하여 파싱합니다.
     """
+    verify_admin(x_admin_password)
     contents = await file.read()
     filename = file.filename
     
@@ -136,7 +143,8 @@ async def get_job_status(job_id: str):
         return {"count": 0, "step": "ERROR", "detail": str(e)}
 
 @router.post("/save")
-async def save_announcement(data: dict):
+async def save_announcement(data: dict, x_admin_password: Optional[str] = Header(None)):
+    verify_admin(x_admin_password)
     announcement_title = data.get("announcement_title", "Untitled")
     houses = data.get("houses", [])
     
@@ -170,7 +178,8 @@ async def save_announcement(data: dict):
     return {"status": "success", "message": f"Saved {len(houses)} records"}
 
 @router.delete("/announcements/{announcement_id}")
-async def delete_announcement(announcement_id: str):
+async def delete_announcement(announcement_id: str, x_admin_password: Optional[str] = Header(None)):
+    verify_admin(x_admin_password)
     # 1. Get title from Mongo first to clean up Postgres
     doc = await mongo_service.get_announcement(announcement_id)
     if doc:

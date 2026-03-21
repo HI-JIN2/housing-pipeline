@@ -50,6 +50,7 @@ const App: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   
   const [isAdmin, setIsAdmin] = useState(false);
+  const [adminPassword, setAdminPassword] = useState<string>('');
   const [previewData, setPreviewData] = useState<{title: string, desc: string, houses: House[]} | null>(null);
   const [hasServerKey, setHasServerKey] = useState(false); // Added this state based on checkConfig content
   const [pendingFiles, setPendingFiles] = useState<FileList | null>(null); // Added this state based on handleFileChange content
@@ -112,14 +113,21 @@ const App: React.FC = () => {
     e.stopPropagation();
     if (!window.confirm('정말 이 공고와 관련된 모든 데이터를 삭제하시겠습니까?')) return;
     try {
-      await axios.delete(`/api/announcements/${id}`);
+      await axios.delete(`/api/announcements/${id}`, {
+        headers: { 'x-admin-password': adminPassword }
+      });
       await fetchAnnouncements();
       if (selectedId === id) {
         setSelectedId(null);
         setDetail(null);
       }
-    } catch (err) {
-      setError('삭제 현장에 실패했습니다.');
+    } catch (err: any) {
+      if (err.response?.status === 401) {
+        setError('관리자 권한이 없거나 비밀번호가 틀렸습니다.');
+        setIsAdmin(false);
+      } else {
+        setError('삭제에 실패했습니다.');
+      }
     }
   };
 
@@ -206,7 +214,8 @@ const App: React.FC = () => {
           'x-job-id': jobId,
           'x-gemini-key': userApiKey,
           'x-provider': selectedProvider,
-          'x-model': selectedModel || undefined
+          'x-model': selectedModel || undefined,
+          'x-admin-password': adminPassword
         }
       });
       
@@ -237,12 +246,19 @@ const App: React.FC = () => {
         announcement_title: previewData.title,
         announcement_description: previewData.desc,
         houses: previewData.houses
+      }, {
+        headers: { 'x-admin-password': adminPassword }
       });
       setPreviewData(null);
       await fetchAnnouncements();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError('초기화 중 오류가 발생했습니다.');
+      if (err.response?.status === 401) {
+        setError('관리자 권한이 없거나 비밀번호가 틀렸습니다.');
+        setIsAdmin(false);
+      } else {
+        setError('최종 저장 중 오류가 발생했습니다.');
+      }
     } finally {
       setUploading(false);
       setParsingStatus('');
@@ -287,7 +303,18 @@ const App: React.FC = () => {
           </button>
 
           <button 
-            onClick={() => setIsAdmin(!isAdmin)}
+            onClick={() => {
+              if (!isAdmin) {
+                const pass = window.prompt('관리자 비밀번호를 입력하세요:');
+                if (pass) {
+                  setAdminPassword(pass);
+                  setIsAdmin(true);
+                }
+              } else {
+                setIsAdmin(false);
+                setAdminPassword('');
+              }
+            }}
             className={cn(
               "p-3 rounded-2xl transition-all relative group shadow-sm",
               isAdmin ? "bg-amber-400 text-slate-900" : "text-slate-400 hover:text-white hover:bg-slate-800"
