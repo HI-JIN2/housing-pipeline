@@ -13,7 +13,8 @@ class LLMService:
             print("Warning: GEMINI_API_KEY is not set properly.")
         
         # Models to cycle through if quota is hit
-        self.available_models = ["gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash-8b"]
+        # Using -latest suffixes for better compatibility with different API versions
+        self.available_models = ["gemini-1.5-flash-latest", "gemini-2.0-flash-exp", "gemini-1.5-flash-8b-latest"]
         self.current_model_idx = 0
         self.model = genai.GenerativeModel(self.available_models[self.current_model_idx])
         
@@ -157,6 +158,15 @@ class LLMService:
 
                     except Exception as e:
                         error_msg = str(e).lower()
+                        # Case 1: Model not found (404)
+                        if "404" in error_msg:
+                            new_model = self._switch_model()
+                            print(f"Model not found. Switched to {new_model}")
+                            await update_status(len(all_houses), f"MODEL_NOT_FOUND_SWITCHING_TO_{new_model}")
+                            await asyncio.sleep(2)
+                            continue
+
+                        # Case 2: Rate limit or Quota (429)
                         if "429" in error_msg:
                             # If it's a quota/limit error, try switching models
                             if "quota" in error_msg or "limit" in error_msg or "exceeded" in error_msg:
