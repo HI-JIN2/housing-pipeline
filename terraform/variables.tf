@@ -14,8 +14,15 @@ variable "fingerprint" {
 }
 
 variable "private_key_path" {
-  description = "Path to API Private Key"
+  description = "Path to API Private Key (for local use)"
   type        = string
+  default     = ""
+}
+
+variable "private_key" {
+  description = "Content of API Private Key (for GitHub Actions)"
+  type        = string
+  default     = ""
 }
 
 variable "region" {
