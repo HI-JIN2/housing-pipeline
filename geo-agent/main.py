@@ -28,6 +28,7 @@ def health_check():
 
 @app.post("/api/enrich")
 async def enrich_data(data: dict):
+    print(f"Received data for enrichment: {data.get('name')} at {data.get('address')}")
     # This replaces the Kafka consumer logic
     await enrich_and_save(data)
     return {"status": "success"}

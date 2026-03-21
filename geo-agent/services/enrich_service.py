@@ -12,8 +12,12 @@ async def enrich_and_save(data: dict):
         
     try:
         # validate input
-        parsed_data = ParsedHousingData(**data)
-        
+        try:
+            parsed_data = ParsedHousingData(**data)
+        except Exception as ve:
+            print(f"Validation Error in Geo Agent for {data.get('name')}: {ve}")
+            return
+            
         # Check cache first
         cached_location = await db_service.get_cached_location(parsed_data.address)
         
@@ -66,7 +70,5 @@ async def enrich_and_save(data: dict):
         await db_service.save_enriched_data(enriched.model_dump())
         print(f"Processed and saved: {enriched.name} -> {station_name} ({distance_meters}m)")
 
-        # Optional: Producer can also sink this to 'enriched_data' topic if needed for Step 4
-        
     except Exception as e:
         print(f"Failed to process message: {e}")

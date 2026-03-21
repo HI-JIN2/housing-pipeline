@@ -31,7 +31,12 @@ class LLMService:
             cached_data = await self.mongo_service.get_cache(text_hash)
             if cached_data:
                 print(f"Cache hit from MongoDB for hash {text_hash}")
-                return [ParsedHousingData(**item) for item in cached_data]
+                if isinstance(cached_data, dict):
+                    # New format already contains 'houses', 'announcement_title', etc.
+                    return cached_data
+                elif isinstance(cached_data, list):
+                    # Legacy format: only a list of houses
+                    return {"houses": cached_data}
         except Exception as e:
             print(f"Error reading mongo cache: {e}")
 
