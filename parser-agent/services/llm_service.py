@@ -47,84 +47,92 @@ class LLMService:
 
         print(f"Total text length: {len(text)}. Micro-chunked into {len(chunks)} fragments.")
         
-        all_houses = []
+        # --- Retry Loop for Expected Count ---
+        max_retries = 2
+        retry_count = 0
+        final_houses = []
         final_title = ""
-        final_description = ""
-        seen_keys = set()
         
-        for idx, chunk_text in enumerate(chunks):
-            print(f"Processing Micro-chunk {idx+1}/{len(chunks)}...")
+        while retry_count < max_retries:
+            all_houses = []
+            seen_keys = set()
             
-            prompt = f"""
-            [EXTRACTOR MODE: MECHANICAL]
-            You are a data extraction robot. Your purpose is EXHAUSTIVE EXTRACTION.
-            
-            [CHUNK CONTEXT] Part {idx+1} of {len(chunks)}.
-            
-            [CRITICAL] Extract EVERY SINGLE housing unit/item mentioned in the [INPUT TEXT].
-            - DO NOT SUMMARIZE.
-            - DO NOT SKIP.
-            - DO NOT GENERALIZE.
-            - Extract even if the item is partial (the overlap will catch it).
-            - Return ONLY a valid JSON object.
+            for idx, chunk_text in enumerate(chunks):
+                print(f"Processing Micro-chunk {idx+1}/{len(chunks)} (Attempt {retry_count+1})...")
+                
+                # Dynamic hint for retries
+                retry_hint = ""
+                if retry_count > 0:
+                    retry_hint = f"\n[RETRY HINT] Previous attempt only found {len(final_houses)} items but we expect {expected_count}. BE EVEN MORE EXHAUSTIVE. DO NOT MISS ANY ROWS."
 
-            [JSON SCHEMA]
-            {{
-                "announcement_title": "string",
-                "houses": [
-                    {{
-                        "name": "string",
-                        "address": "string", 
-                        "house_type": "string",
-                        "deposit": number (만원),
-                        "monthly_rent": number (만원),
-                        "extra_info": {{}}
-                    }}
-                ]
-            }}
-            
-            [INPUT TEXT]
-            {chunk_text}
-            """
-            
-            try:
-                response = await self.model.generate_content_async(
-                    contents=prompt,
-                    generation_config=genai.GenerationConfig(
-                        response_mime_type="application/json",
-                        temperature=0.0 # Maximum determinism
+                prompt = f"""
+                [EXTRACTOR MODE: MECHANICAL]
+                You are a data extraction robot. Your purpose is EXHAUSTIVE EXTRACTION.{retry_hint}
+                
+                [CHUNK CONTEXT] Part {idx+1} of {len(chunks)}.
+                
+                [CRITICAL] Extract EVERY SINGLE housing unit/item mentioned in the [INPUT TEXT].
+                - DO NOT SUMMARIZE.
+                - DO NOT SKIP.
+                - DO NOT GENERALIZE.
+                - Extract even if the item is partial (the overlap will catch it).
+                - Return ONLY a valid JSON object.
+
+                [JSON SCHEMA]
+                {{
+                    "announcement_title": "string",
+                    "houses": [
+                        {{
+                            "name": "string",
+                            "address": "string", 
+                            "house_type": "string",
+                            "deposit": number (만원),
+                            "monthly_rent": number (만원),
+                            "extra_info": {{}}
+                        }}
+                    ]
+                }}
+                
+                [INPUT TEXT]
+                {chunk_text}
+                """
+                
+                try:
+                    response = await self.model.generate_content_async(
+                        contents=prompt,
+                        generation_config=genai.GenerationConfig(
+                            response_mime_type="application/json",
+                            temperature=0.2 if retry_count > 0 else 0.0
+                        )
                     )
-                )
-                
-                parsed = json.loads(response.text)
-                houses = parsed.get("houses", [])
-                
-                chunk_added = 0
-                for h in houses:
-                    # Robust deduplication key
-                    h_key = f"{h.get('name')}-{h.get('address')}-{h.get('house_type')}-{h.get('deposit')}"
-                    if h_key not in seen_keys:
-                        # Add metadata for final validation
-                        h["chunk_source"] = idx+1
-                        all_houses.append(h)
-                        seen_keys.add(h_key)
-                        chunk_added += 1
-                
-                print(f"Chunk {idx+1}: Extracted {len(houses)}, Added {chunk_added} unique. Total unique: {len(all_houses)}")
-                
-                if not final_title: final_title = parsed.get("announcement_title", "")
                     
-            except Exception as e:
-                print(f"Error in Micro-chunk {idx+1}: {e}")
-                continue
+                    parsed = json.loads(response.text)
+                    houses = parsed.get("houses", [])
+                    
+                    for h in houses:
+                        h_key = f"{h.get('name')}-{h.get('address')}-{h.get('house_type')}-{h.get('deposit')}"
+                        if h_key not in seen_keys:
+                            all_houses.append(h)
+                            seen_keys.add(h_key)
+                    
+                    if not final_title: final_title = parsed.get("announcement_title", "")
+                        
+                except Exception as e:
+                    print(f"Error in Micro-chunk {idx+1}: {e}")
+                    continue
+
+            final_houses = all_houses
+            
+            # Check if we should retry
+            if expected_count and len(final_houses) < (expected_count * 0.95):
+                retry_count += 1
+                print(f"Count mismatch: Got {len(final_houses)}, Expected {expected_count}. Retrying ({retry_count}/{max_retries})...")
+            else:
+                break
 
         valid_houses = []
-        for index, item in enumerate(all_houses):
+        for index, item in enumerate(final_houses):
             try:
-                # Stable hash-based ID for duplicate prevention
-                # Include title in hash to make it unique per announcement if needed, 
-                # or exclude it if we want global uniqueness for the same house.
-                # Here we include title to respect the "One announcement has 4 duplicates" fix.
                 house_identity = f"{final_title}|{item.get('name')}|{item.get('address')}|{item.get('house_type')}|{item.get('deposit')}"
                 stable_id = hashlib.md5(house_identity.encode()).hexdigest()
                 item["id"] = f"h-{stable_id}"
