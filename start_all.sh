@@ -41,7 +41,7 @@ echo "[3/3] Geo Agent (위치 정보/길찾기) 포트 8001 실행 중..."
 cd geo-agent
 pip3 install -r requirements.txt > /dev/null 2>&1
 echo "    -> 파싱된 역 좌표 정보를 바탕으로 DB를 초기화합니다..."
-python3 scripts/load_stations.py "../서울교통공사_1_8호선 역사 좌표(위경도) 정보_20250814.csv" || true
+python3 scripts/load_stations.py "data/stations.csv" || true
 python3 -m uvicorn main:app --reload --port 8001 &
 GEO_PID=$!
 cd ..

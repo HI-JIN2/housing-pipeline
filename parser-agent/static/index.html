@@ -225,29 +225,24 @@
             position: fixed;
             bottom: 2rem;
             right: 2rem;
-            background-color: #FFDD00;
-            color: #000000;
-            border-radius: 9999px;
-            padding: 0.75rem 1.5rem;
-            font-weight: 700;
-            font-size: 0.95rem;
-            text-decoration: none;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            transition: transform 0.2s, box-shadow 0.2s;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
             z-index: 50;
+            transition: transform 0.2s;
+        }
+        .bmc-btn img {
+            height: 48px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+            border-radius: 12px;
         }
         .bmc-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 8px rgba(0,0,0,0.15);
         }
     </style>
 </head>
 <body>
     <a href="https://qr.kakaopay.com/your_kakaopay_code_here" target="_blank" class="bmc-btn">
-        ☕ 개발자에게 커피 후원하기 (카카오페이)
+        <img src="/static/images/btn_send_regular.png" alt="카카오페이 송금하기">
     </a>
 
 <div class="container">
