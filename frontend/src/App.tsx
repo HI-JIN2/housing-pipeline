@@ -142,6 +142,7 @@ const App: React.FC = () => {
     if (!pendingFiles) return;
     
     setUploading(true);
+    setActiveProvider(selectedProvider);
     setIsConfirmingUpload(false);
     setParsingStatus('문서에서 텍스트를 추출하는 중...');
     setCurrentStep(1);

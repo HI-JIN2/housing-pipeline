@@ -122,7 +122,7 @@ class LLMService:
                         "model": active_model,
                         "provider": provider,
                         "key_idx": self.current_key_idx if provider == "gemini" and not api_key else -1,
-                        "partial_houses": all_houses[-20:] # Keep last few houses for preview/status
+                        "partial_houses": all_houses[-20:] if 'all_houses' in locals() else []
                     }
                     if error:
                         update_fields["last_error"] = error
@@ -134,6 +134,9 @@ class LLMService:
                     )
                 except Exception as e:
                     print(f"Failed to update status: {e}")
+
+        # Initialize status record immediately
+        await update_status(0, "STARTING_ANALYSIS")
 
         try:
             cached_data = await self.mongo_service.get_cache(text_hash)
@@ -235,6 +238,10 @@ class LLMService:
                             )
                             response_text = response.text
                         
+                        # LOG RESPONSE (Request from USER)
+                        print(f"--- LLM RESPONSE (Chunk {idx+1}) ---")
+                        print(response_text[:1000] + ("..." if len(response_text) > 1000 else ""))
+                        
                         parsed = json.loads(response_text)
                         houses = parsed.get("houses", [])
                         
@@ -247,7 +254,9 @@ class LLMService:
                         if not final_title: final_title = parsed.get("announcement_title", "")
                         
                         # Success - wait a bit to prevent 429 on next chunk
-                        await asyncio.sleep(4) 
+                        await update_status(len(all_houses), f"ANALYZED_CHUNK_{idx+1}_OF_{len(chunks)}")
+                        if provider == "gemini":
+                            await asyncio.sleep(2) 
                         break
 
                     except Exception as e:
@@ -314,14 +323,17 @@ class LLMService:
                             await update_status(len(all_houses), f"ERROR_CHUNK_{idx+1}", error=str(e))
                             break
 
-            final_houses = all_houses
-            
             # Check if we should retry
-            if expected_count and len(final_houses) < (expected_count * 0.95):
+            if expected_count and len(all_houses) < (expected_count * 0.95):
                 retry_count += 1
-                print(f"Count mismatch: Got {len(final_houses)}, Expected {expected_count}. Retrying ({retry_count}/{max_retries})...")
-                await asyncio.sleep(10) # Cooldown between global retries
+                if len(all_houses) > len(final_houses):
+                    final_houses = all_houses # Keep the best found so far
+                
+                print(f"Count mismatch: Got {len(all_houses)}, Expected {expected_count}. Retrying ({retry_count}/{max_retries})...")
+                await update_status(len(final_houses), f"RETRYING_ATTEMPT_{retry_count+1}")
+                await asyncio.sleep(5) 
             else:
+                final_houses = all_houses
                 break
 
         valid_houses = []
