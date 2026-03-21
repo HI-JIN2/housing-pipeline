@@ -43,8 +43,8 @@ async def main():
                 try:
                     await conn.execute("""
                         INSERT INTO stations (name, location)
-                        SELECT $1, ST_SetSRID(ST_MakePoint($3, $2), 4326)
-                        WHERE NOT EXISTS (SELECT 1 FROM stations WHERE name = $1);
+                        SELECT $1::VARCHAR, ST_SetSRID(ST_MakePoint($3::FLOAT, $2::FLOAT), 4326)
+                        WHERE NOT EXISTS (SELECT 1 FROM stations WHERE name = $1::VARCHAR);
                     """, name, float(lat), float(lng))
                     success_count += 1
                 except Exception as e:
