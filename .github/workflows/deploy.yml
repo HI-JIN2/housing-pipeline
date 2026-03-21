@@ -36,6 +36,10 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/housing-geo:latest
 
+      - name: Inject Kakao JS Key
+        run: |
+          sed -i "s/YOUR_KAKAO_JS_KEY_PLACEHOLDER/${{ secrets.KAKAO_JS_KEY }}/g" frontend/index.html
+
       - name: Build and Push Frontend
         uses: docker/build-push-action@v4
         with:
