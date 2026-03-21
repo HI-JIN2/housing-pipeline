@@ -12,11 +12,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from services.db_service import DBService
+db_service = DBService()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Starting Parser Agent...")
+    await db_service.init_pool()
     yield
     print("Shutting down Parser Agent...")
+    await db_service.close_pool()
 
 app = FastAPI(title="Parser Agent (Housing Pipeline)", lifespan=lifespan)
 
