@@ -118,21 +118,22 @@ async def upload_file(
             "parsed_houses": all_houses
         })
 
-        # 3. Geo Agent에게 직접 전송 (HTTP POST)
-        published_count = 0
+        # 3. Geo Agent에게 병렬 전송 (HTTP POST)
         async with httpx.AsyncClient() as client:
+            tasks = []
             for data in all_houses:
-                message = data
-                try:
-                    print(f"Calling Geo Agent for {message.get('name')}...")
-                    response = await client.post(GEO_AGENT_URL, json=message, timeout=30.0)
-                    if response.status_code == 200:
-                        published_count += 1
-                        print(f"Successfully called Geo Agent for {message.get('name')}")
-                    else:
-                        print(f"Geo Agent returned {response.status_code}: {response.text}")
-                except Exception as e:
-                    print(f"Error calling Geo Agent for {message.get('name')}: {e}")
+                tasks.append(client.post(GEO_AGENT_URL, json=data, timeout=60.0))
+            
+            responses = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            published_count = 0
+            for i, response in enumerate(responses):
+                if isinstance(response, Exception):
+                    print(f"Error calling Geo Agent for {all_houses[i].get('name')}: {response}")
+                elif response.status_code == 200:
+                    published_count += 1
+                else:
+                    print(f"Geo Agent returned {response.status_code} for {all_houses[i].get('name')}")
 
         return {
             "status": "success",
