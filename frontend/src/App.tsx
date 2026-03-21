@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
   Upload, FileText, ChevronRight, Loader2, AlertCircle, Home, 
-  MapPin, BadgeCent, Map as MapIcon, Layers, ChevronLeft, Search, Menu, X 
+  MapPin, BadgeCent, Layers, ChevronLeft, Search, Menu, X 
 } from 'lucide-react';
 import MapView from './components/KakaoMapView';
 import { clsx, type ClassValue } from 'clsx';
@@ -39,7 +39,6 @@ const App: React.FC = () => {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<House[] | null>(null);
-  const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -61,7 +60,6 @@ const App: React.FC = () => {
   };
 
   const loadDetail = async (id: string) => {
-    setLoading(true);
     setSelectedId(id);
     setSelectedHouseId(null);
     setIsDrawerOpen(false);
@@ -70,8 +68,6 @@ const App: React.FC = () => {
       setDetail(res.data.data);
     } catch (err) {
       setError('상세 정보를 불러오지 못했습니다.');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -327,14 +323,24 @@ const App: React.FC = () => {
         href="https://qr.kakaopay.com/Ej88F1kMG" 
         target="_blank" 
         rel="noreferrer"
-        className="fixed bottom-8 right-8 group hover:-translate-y-1 transition-transform z-50 flex items-center justify-center p-0 overflow-hidden bg-transparent"
+        className="fixed bottom-6 right-6 lg:bottom-10 lg:right-10 group hover:-translate-y-1 transition-transform z-50 flex items-center justify-center p-0 bg-transparent"
       >
-        <img 
-          src="http://localhost:8000/static/images/btn_send_regular.png" 
-          alt="카카오페이" 
-          className="h-12 block filter drop-shadow-md rounded-xl"
-          onError={(e) => (e.currentTarget.style.display = 'none')}
-        />
+        <picture>
+          <source 
+            media="(max-width: 640px)" 
+            srcSet="http://localhost:8000/static/images/btn_send_tiny.png" 
+          />
+          <source 
+            media="(max-width: 1024px)" 
+            srcSet="http://localhost:8000/static/images/btn_send_small.png" 
+          />
+          <img 
+            src="http://localhost:8000/static/images/btn_send_regular.png" 
+            alt="카카오페이" 
+            className="h-8 md:h-10 lg:h-12 block filter drop-shadow-[0_5px_8px_rgba(0,0,0,0.3)] rounded-xl"
+            onError={(e) => (e.currentTarget.style.display = 'none')}
+          />
+        </picture>
       </a>
 
       {/* Global CSS for scrollbar */}
