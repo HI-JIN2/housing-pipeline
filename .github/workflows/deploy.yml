@@ -62,6 +62,12 @@ jobs:
           script: |
             mkdir -p /home/ubuntu/housing-pipeline
             cd /home/ubuntu/housing-pipeline
+            
+            # Ensure ports are open in OS firewall
+            sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT || true
+            sudo iptables -I INPUT -p tcp --dport 8000 -j ACCEPT || true
+            sudo iptables -I INPUT -p tcp --dport 5173 -j ACCEPT || true
+            
             # Copy docker-compose.prod.yml from the latest build if not already there
             # (In a real scenario, you might want to SCP it first or keep it in the VM)
             

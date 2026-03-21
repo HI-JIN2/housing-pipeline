@@ -49,6 +49,24 @@ resource "oci_core_security_list" "housing_security_list" {
       max = 8000
     }
   }
+
+  ingress_security_rules {
+    protocol = "6" # TCP
+    source   = "0.0.0.0/0"
+    tcp_options {
+      min = 80
+      max = 80
+    }
+  }
+
+  ingress_security_rules {
+    protocol = "6" # TCP
+    source   = "0.0.0.0/0"
+    tcp_options {
+      min = 5173
+      max = 5173
+    }
+  }
 }
 
 resource "oci_core_subnet" "housing_subnet" {
