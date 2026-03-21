@@ -36,6 +36,20 @@ class DBService:
                 WHERE NOT EXISTS (SELECT 1 FROM stations WHERE name = '강남역');
             """)
 
+            # Location Cache Table
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS location_cache (
+                    address VARCHAR(255) PRIMARY KEY,
+                    name VARCHAR(255),
+                    lat FLOAT,
+                    lng FLOAT,
+                    nearest_station VARCHAR(100),
+                    distance_meters INTEGER,
+                    walking_time_mins INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+
             # Enriched Housing Data table
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS housing_data (
@@ -69,6 +83,39 @@ class DBService:
             if row:
                 return row['name'], int(row['dist_meters'])
             return None, 0
+
+    async def get_cached_location(self, address: str) -> Optional[dict]:
+        """Returns cached location data for a given address if it exists."""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow("""
+                SELECT address, name, lat, lng, nearest_station, distance_meters, walking_time_mins
+                FROM location_cache
+                WHERE address = $1;
+            """, address)
+            
+            if row:
+                return dict(row)
+            return None
+
+    async def save_cached_location(self, data_dict: dict):
+        """Saves API/DB computed geodata to the location cache table."""
+        async with self.pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO location_cache (
+                    address, name, lat, lng, nearest_station, distance_meters, walking_time_mins
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7
+                ) ON CONFLICT (address) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    lat = EXCLUDED.lat,
+                    lng = EXCLUDED.lng,
+                    nearest_station = EXCLUDED.nearest_station,
+                    distance_meters = EXCLUDED.distance_meters,
+                    walking_time_mins = EXCLUDED.walking_time_mins;
+            """,
+            data_dict.get('address'), data_dict.get('name'), 
+            data_dict.get('lat'), data_dict.get('lng'),
+            data_dict.get('nearest_station'), data_dict.get('distance_meters'), data_dict.get('walking_time_mins'))
 
     async def save_enriched_data(self, data_dict: dict):
         async with self.pool.acquire() as conn:
