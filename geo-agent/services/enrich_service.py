@@ -66,8 +66,11 @@ async def enrich_and_save(data: dict):
             walking_time_mins=walking_time_mins
         )
         
-        # 4. Save to DB
-        await db_service.save_enriched_data(enriched.model_dump())
+        # 4. Save to DB (Include announcement_id if present in data)
+        enriched_dict = enriched.model_dump()
+        enriched_dict['announcement_id'] = data.get('announcement_id')
+        
+        await db_service.save_enriched_data(enriched_dict)
         print(f"Processed and saved: {enriched.name} -> {station_name} ({distance_meters}m)")
 
     except Exception as e:

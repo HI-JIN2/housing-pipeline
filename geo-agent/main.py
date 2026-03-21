@@ -38,3 +38,8 @@ async def enrich_data(data: dict):
     # This replaces the Kafka consumer logic
     await enrich_and_save(data)
     return {"status": "success"}
+
+@app.delete("/api/housing/{announcement_id}")
+async def delete_housing_data(announcement_id: str):
+    await db_service.delete_housing_data_by_announcement(announcement_id)
+    return {"status": "success"}

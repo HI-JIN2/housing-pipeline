@@ -63,6 +63,7 @@ class DBService:
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS housing_data (
                     id VARCHAR(255) PRIMARY KEY,
+                    announcement_id VARCHAR(255),
                     name VARCHAR(255),
                     address TEXT,
                     house_type VARCHAR(100),
@@ -76,6 +77,11 @@ class DBService:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
+
+    async def delete_housing_data_by_announcement(self, announcement_id: str):
+        async with self.pool.acquire() as conn:
+            await conn.execute("DELETE FROM housing_data WHERE announcement_id = $1", announcement_id)
+            print(f"Deleted housing data for announcement: {announcement_id}")
 
     async def find_nearest_station(self, lat: float, lng: float) -> tuple[Optional[str], int]:
         """Returns (station_name, distance_in_meters). Walking time can be approximated later."""
@@ -130,18 +136,25 @@ class DBService:
         async with self.pool.acquire() as conn:
             await conn.execute("""
                 INSERT INTO housing_data (
-                    id, name, address, house_type, deposit, monthly_rent,
+                    id, announcement_id, name, address, house_type, deposit, monthly_rent,
                     lat, lng, nearest_station, distance_meters, walking_time_mins
                 ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
                 ) ON CONFLICT (id) DO UPDATE SET
+                    announcement_id = EXCLUDED.announcement_id,
                     name = EXCLUDED.name,
                     address = EXCLUDED.address,
+                    house_type = EXCLUDED.house_type,
+                    deposit = EXCLUDED.deposit,
+                    monthly_rent = EXCLUDED.monthly_rent,
+                    lat = EXCLUDED.lat,
+                    lng = EXCLUDED.lng,
                     nearest_station = EXCLUDED.nearest_station,
                     distance_meters = EXCLUDED.distance_meters,
                     walking_time_mins = EXCLUDED.walking_time_mins;
             """,
-            data_dict.get('id'), data_dict.get('name'), data_dict.get('address'), 
+            data_dict.get('id'), data_dict.get('announcement_id'), 
+            data_dict.get('name'), data_dict.get('address'), 
             data_dict.get('house_type'), data_dict.get('deposit'), data_dict.get('monthly_rent'),
             data_dict.get('lat'), data_dict.get('lng'), 
             data_dict.get('nearest_station'), data_dict.get('distance_meters'), data_dict.get('walking_time_mins'))
