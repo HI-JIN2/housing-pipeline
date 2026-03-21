@@ -1,4 +1,5 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from typing import Optional
 from services.pdf_service import PDFService
 from services.excel_service import ExcelService
 from services.llm_service import LLMService
@@ -13,7 +14,7 @@ router = APIRouter()
 llm_service = LLMService()
 
 @router.post("/upload")
-async def upload_file(files: list[UploadFile] = File(...)):
+async def upload_file(files: list[UploadFile] = File(...), gemini_key: Optional[str] = Form(None)):
     if len(files) > 3:
         raise HTTPException(status_code=400, detail="Maximum 3 files allowed")
 
@@ -36,9 +37,12 @@ async def upload_file(files: list[UploadFile] = File(...)):
                 continue
                 
             # 2. LLM 구조화
-            parsed_data = await llm_service.parse_housing_data(extracted_text)
-            if parsed_data:
-                housing_data_list.extend(parsed_data)
+            try:
+                parsed_data = await llm_service.parse_housing_data(extracted_text, api_key=gemini_key)
+                if parsed_data:
+                    housing_data_list.extend(parsed_data)
+            except ValueError as ve:
+                raise HTTPException(status_code=400, detail=str(ve))
 
         if not housing_data_list:
             return {"status": "warning", "message": "No housing data successfully parsed from the provided files"}

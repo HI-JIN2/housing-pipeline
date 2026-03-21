@@ -183,6 +183,10 @@
         <h1>Housing Pipeline</h1>
         <p class="subtitle">청약/매물 문서(.pdf, .xlsx)를 업로드하면 자동으로 구조화됩니다.</p>
         
+        <div class="api-key-container" style="margin-bottom: 1.5rem;">
+            <input type="password" id="geminiKey" placeholder="Gemini API Key 입력 (선택, .env 미설정 시 필수)" style="width: 100%; padding: 0.75rem; border-radius: 8px; border: 1px solid #cbd5e1; outline: none; box-sizing: border-box; font-size: 1rem; transition: border-color 0.3s ease;">
+        </div>
+
         <div class="dropzone" id="dropzone">
             <span class="drop-icon">📄</span>
             <div class="drop-title">클릭하거나 파일을 위로 끌어다 놓으세요</div>
@@ -215,6 +219,7 @@
     const resultJson = document.getElementById('resultJson');
     const resultBadge = document.getElementById('resultBadge');
     const errorMessage = document.getElementById('errorMessage');
+    const geminiKeyInput = document.getElementById('geminiKey');
 
     // Drag and drop handlers
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -271,6 +276,11 @@
     async function uploadFiles(files) {
         const formData = new FormData();
         files.forEach(file => formData.append('files', file));
+        
+        const geminiKey = geminiKeyInput.value.trim();
+        if (geminiKey) {
+            formData.append('gemini_key', geminiKey);
+        }
 
         // Reset UI
         errorMessage.style.display = 'none';

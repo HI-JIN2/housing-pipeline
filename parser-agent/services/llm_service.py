@@ -19,7 +19,14 @@ class LLMService:
         self.cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache")
         os.makedirs(self.cache_dir, exist_ok=True)
 
-    async def parse_housing_data(self, text: str) -> List[ParsedHousingData]:
+    async def parse_housing_data(self, text: str, api_key: str = None) -> List[ParsedHousingData]:
+        current_api_key = api_key or self.api_key
+        if not current_api_key or current_api_key == "your_gemini_api_key_here":
+            raise ValueError("Gemini API key is not set. Please provide it in the UI or .env file.")
+        
+        # Override key for this call
+        genai.configure(api_key=current_api_key)
+        
         text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
         cache_file = os.path.join(self.cache_dir, f"{text_hash}.json")
         
