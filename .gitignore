@@ -1,11 +1,29 @@
+# General
+.DS_Store
+*.pyc
 *.pyo
 *.pyd
-parser-agent/cache/
-*.tfvars
-.terraform/
-terraform.tfstate*
-oci_key*
+__pycache__/
 node_modules/
 dist/
 .env
-*.pyc
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+_override.tf
+_override.tf.json
+crash.log
+
+# OCI / SSH Secrets
+oci_key*
+*.pem
+
+# Project Specific
+parser-agent/cache/
