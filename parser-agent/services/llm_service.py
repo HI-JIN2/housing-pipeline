@@ -3,6 +3,7 @@ from shared.models import ParsedHousingData
 from typing import List
 import os
 import json
+import hashlib
 
 class LLMService:
     def __init__(self):
@@ -11,10 +12,26 @@ class LLMService:
             print("Warning: GEMINI_API_KEY is not set properly.")
         
         genai.configure(api_key=self.api_key)
-        # Use gemini-1.5-flash for fast and cost-effective text tasks
-        self.model = genai.GenerativeModel("gemini-1.5-flash")
+        # Use gemini-1.5-flash-latest to avoid 404 with v1beta
+        self.model = genai.GenerativeModel("gemini-1.5-flash-latest")
+        
+        # Cache directory
+        self.cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache")
+        os.makedirs(self.cache_dir, exist_ok=True)
 
     async def parse_housing_data(self, text: str) -> List[ParsedHousingData]:
+        text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
+        cache_file = os.path.join(self.cache_dir, f"{text_hash}.json")
+        
+        if os.path.exists(cache_file):
+            try:
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    cached_data = json.load(f)
+                print(f"Cache hit for hash {text_hash}")
+                return [ParsedHousingData(**item) for item in cached_data]
+            except Exception as e:
+                print(f"Error reading cache: {e}")
+
         prompt = f"""
         다음은 주택청약 공고문 또는 주택 목록 PDF에서 추출한 텍스트입니다.
         여기에서 각 주택(아파트/호실)의 정보를 추출하여 JSON 리스트 형태로 반환하세요.
@@ -74,6 +91,15 @@ class LLMService:
                     results.append(parsed)
                     
             housing_list = [ParsedHousingData(**item) for item in results]
+            
+            # Save to cache
+            try:
+                with open(cache_file, "w", encoding="utf-8") as f:
+                    json.dump([item.model_dump() for item in housing_list], f, ensure_ascii=False, indent=2)
+                print(f"Saved results to cache: {cache_file}")
+            except Exception as e:
+                print(f"Error writing cache: {e}")
+                
             return housing_list
             
         except Exception as e:
