@@ -14,7 +14,7 @@ COPY shared /app/shared
 COPY geo-agent /app/geo-agent
 
 # Set python path
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app:/app/geo-agent
 
 EXPOSE 8001
 

@@ -14,7 +14,7 @@ COPY shared /app/shared
 COPY parser-agent /app/parser-agent
 
 # Set python path to include the root for shared module access
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app:/app/parser-agent
 
 EXPOSE 8000
 

@@ -10,7 +10,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from .services.enrich_service import enrich_and_save, db_service
+from services.enrich_service import enrich_and_save, db_service
+
+# Direct health check
+@app.get("/api/health")
+def health_check():
+    return {"status": "ok", "message": "Geo Agent is running"}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

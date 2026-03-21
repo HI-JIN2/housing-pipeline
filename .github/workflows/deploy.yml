@@ -112,3 +112,9 @@ jobs:
             # Use sudo docker compose with --env-file and specify the project directory
             sudo docker compose --env-file .env -f deploy/docker-compose.prod.yml pull
             sudo docker compose --env-file .env -f deploy/docker-compose.prod.yml up -d --force-recreate
+            
+            # Diagnostic check
+            echo "Waiting for services to start..."
+            sleep 10
+            sudo docker compose -f deploy/docker-compose.prod.yml ps
+            curl -f http://localhost/api/health || { echo "Health check failed! Printing logs..."; sudo docker compose -f deploy/docker-compose.prod.yml logs; exit 1; }
