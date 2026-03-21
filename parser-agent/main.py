@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI):
     print("Shutting down Parser Agent...")
     await db_service.close_pool()
 
-app = FastAPI(title="Parser Agent (Housing Pipeline)", lifespan=lifespan)
+app = FastAPI(title="Parser Agent (공고zip)", lifespan=lifespan)
 
 from api.routes import router as api_router
 app.include_router(api_router, prefix="/api")

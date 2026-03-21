@@ -10,7 +10,7 @@ systemctl enable docker
 systemctl start docker
 usermod -aG docker ubuntu
 
-# Open Ubuntu iptables for Housing Pipeline UI (Port 8000)
+# Open Ubuntu iptables for 공고zip UI (Port 8000)
 iptables -I INPUT -p tcp -m tcp --dport 8000 -j ACCEPT
 netfilter-persistent save
 

@@ -1,4 +1,4 @@
-# Housing Pipeline: AI-Powered Real Estate Analytics System
+# Gonggo-zip (공고zip): AI-Powered Housing Announcement Automation System
 
 An intelligent data pipeline that automatically extracts key information from real estate/subscription announcements (PDF, XLSX) using AI (Gemini), updates location data, and calculates walking distances to subway stations via PostGIS.
 

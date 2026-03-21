@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
     print("Shutting down Geo Agent...")
     await db_service.close_pool()
 
-app = FastAPI(title="Geo Agent (Housing Pipeline)", lifespan=lifespan)
+app = FastAPI(title="Geo Agent (공고zip)", lifespan=lifespan)
 
 @app.get("/")
 def health_check():

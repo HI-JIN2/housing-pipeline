@@ -26,7 +26,7 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 echo "======================================"
-echo "🚀 Housing Pipeline 전체 구동 스크립트"
+echo "🚀 공고zip All-in-one 로컬 실행 스크립트"
 echo "======================================"
 
 echo "🧹 이전 좀비 프로세스 정리 중..."
