@@ -1,30 +1,34 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from services.pdf_service import PDFService
+from services.excel_service import ExcelService
 from services.llm_service import LLMService
 import uuid
 import sys
 import os
 
 # To access global kafka_producer from main.py without circular import
-# Alternatively, inject it or import dynamically.
-# For simplicity in this structure:
 from main import kafka_producer
 
 router = APIRouter()
 llm_service = LLMService()
 
 @router.post("/upload")
-async def upload_pdf(file: UploadFile = File(...)):
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+async def upload_file(file: UploadFile = File(...)):
+    filename = file.filename.lower()
+    if not (filename.endswith('.pdf') or filename.endswith('.xlsx')):
+        raise HTTPException(status_code=400, detail="Only PDF and XLSX files are allowed")
 
     try:
-        pdf_bytes = await file.read()
+        file_bytes = await file.read()
         
-        # 1. 텍스트 추출
-        extracted_text = PDFService.extract_text(pdf_bytes)
+        # 1. 텍스트 추출 (확장자별 분기)
+        if filename.endswith('.pdf'):
+            extracted_text = PDFService.extract_text(file_bytes)
+        else:
+            extracted_text = ExcelService.extract_text(file_bytes)
+            
         if not extracted_text.strip():
-            raise HTTPException(status_code=400, detail="Could not extract text from PDF")
+            raise HTTPException(status_code=400, detail="Could not extract text from file")
             
         # 2. LLM 구조화
         housing_data_list = await llm_service.parse_housing_data(extracted_text)
