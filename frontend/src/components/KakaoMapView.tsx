@@ -13,6 +13,10 @@ interface HouseLocation {
   lng?: number;
   address: string;
   house_type: string;
+  deposit?: number;
+  monthly_rent?: number;
+  nearest_station?: string;
+  walking_time_mins?: number;
 }
 
 interface MapProps {
@@ -86,10 +90,34 @@ const KakaoMapView: React.FC<MapProps> = ({ houses, selectedHouseId }) => {
           map: map
         });
 
+        // Format values for the info window
+        const depositStr = house.deposit ? `${house.deposit.toLocaleString()}만원` : '-';
+        const rentStr = house.monthly_rent !== undefined ? `${house.monthly_rent.toLocaleString()}만원` : '-';
+        const transportInfo = house.nearest_station 
+          ? `<p style="margin:8px 0 0; font-size:11px; color:#10b981; font-weight:bold;">🚉 ${house.nearest_station}역 (도보 ${house.walking_time_mins || '?'}분)</p>`
+          : '';
+
         const iwContent = `
-          <div style="padding:10px; min-width:150px; border-radius:12px; border:none; background:white; font-family:sans-serif; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);">
-            <h4 style="margin:0; font-size:14px; font-weight:bold; color:#1e293b;">${house.name}</h4>
-            <p style="margin:4px 0 0; font-size:11px; color:#64748b;">${house.house_type}</p>
+          <div style="padding:15px; min-width:200px; border-radius:16px; border:none; background:white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);">
+            <div style="margin-bottom:8px;">
+              <span style="display:inline-block; padding:2px 8px; background:#f1f5f9; color:#64748b; font-size:10px; font-weight:800; border-radius:6px; margin-bottom:4px; text-transform:uppercase;">${house.house_type}</span>
+              <h4 style="margin:0; font-size:16px; font-weight:900; color:#1e293b; letter-spacing:-0.025em; line-height:1.2;">${house.name}</h4>
+            </div>
+            
+            <div style="padding:10px; background:#f8fafc; border-radius:12px; margin-top:8px;">
+              <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <span style="font-size:11px; color:#94a3b8; font-weight:600;">보증금</span>
+                <span style="font-size:12px; color:#4f46e5; font-weight:800;">${depositStr}</span>
+              </div>
+              <div style="display:flex; justify-content:space-between;">
+                <span style="font-size:11px; color:#94a3b8; font-weight:600;">월세</span>
+                <span style="font-size:12px; color:#4f46e5; font-weight:800;">${rentStr}</span>
+              </div>
+            </div>
+            
+            ${transportInfo}
+            
+            <p style="margin:10px 0 0; font-size:10px; color:#94a3b8; line-height:1.4; border-top:1px solid #f1f5f9; pt:8px;">📍 ${house.address}</p>
           </div>
         `;
         const infowindow = new window.kakao.maps.InfoWindow({
@@ -115,7 +143,6 @@ const KakaoMapView: React.FC<MapProps> = ({ houses, selectedHouseId }) => {
         map.setBounds(bounds);
       }
 
-      // 🚨 CRITICAL: Apply selection AFTER markers are created
       if (selectedHouseId) {
         setTimeout(() => applySelection(selectedHouseId), 100);
       }
@@ -128,7 +155,6 @@ const KakaoMapView: React.FC<MapProps> = ({ houses, selectedHouseId }) => {
 
   // Handle selection change
   useEffect(() => {
-    console.log("🎯 Selection effect triggered:", selectedHouseId);
     applySelection(selectedHouseId);
   }, [selectedHouseId]);
 
