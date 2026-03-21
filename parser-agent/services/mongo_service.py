@@ -72,3 +72,10 @@ class MongoService:
             return doc
         except Exception:
             return None
+    async def delete_announcement(self, announcement_id: str):
+        from bson.objectid import ObjectId
+        try:
+            await self.announcements_collection.delete_one({"_id": ObjectId(announcement_id)})
+            return True
+        except Exception:
+            return False

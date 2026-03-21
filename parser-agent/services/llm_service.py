@@ -118,15 +118,18 @@ class LLMService:
                 print(f"Error in Micro-chunk {idx+1}: {e}")
                 continue
 
-        # Final Validation & Global ID assignment
         valid_houses = []
         for index, item in enumerate(all_houses):
             try:
-                # Assign stable global ID
-                item["id"] = f"house-global-{index+1}"
+                # Stable hash-based ID for duplicate prevention
+                # Include title in hash to make it unique per announcement if needed, 
+                # or exclude it if we want global uniqueness for the same house.
+                # Here we include title to respect the "One announcement has 4 duplicates" fix.
+                house_identity = f"{final_title}|{item.get('name')}|{item.get('address')}|{item.get('house_type')}|{item.get('deposit')}"
+                stable_id = hashlib.md5(house_identity.encode()).hexdigest()
+                item["id"] = f"h-{stable_id}"
                 valid_houses.append(ParsedHousingData(**item).model_dump())
             except Exception as e:
-                # Log failed validation if needed
                 pass
 
         final_result = {
