@@ -106,7 +106,6 @@ jobs:
             echo "DOCKER_IMAGE_PARSER=${{ secrets.DOCKERHUB_USERNAME }}/housing-parser:latest" > .env
             echo "DOCKER_IMAGE_GEO=${{ secrets.DOCKERHUB_USERNAME }}/housing-geo:latest" >> .env
             echo "DOCKER_IMAGE_FRONTEND=${{ secrets.DOCKERHUB_USERNAME }}/housing-frontend:latest" >> .env
-            echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> .env
             echo "KAKAO_REST_API_KEY=${{ secrets.KAKAO_REST_API_KEY }}" >> .env
             
             # Use sudo docker compose with --env-file
