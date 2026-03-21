@@ -8,7 +8,16 @@ class DBService:
         self.pool = None
 
     async def init_pool(self):
-        self.pool = await asyncpg.create_pool(self.dsn)
+        import asyncio
+        for i in range(10):
+            try:
+                self.pool = await asyncpg.create_pool(self.dsn)
+                print("Database connected gracefully")
+                break
+            except Exception as e:
+                print(f"Waiting for Postgres to initialize... ({i+1}/10) - {e}")
+                await asyncio.sleep(2)
+        raise Exception("Could not connect to Database after 10 retries.")
         await self._init_schema()
 
     async def close_pool(self):

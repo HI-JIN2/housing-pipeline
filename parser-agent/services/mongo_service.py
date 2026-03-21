@@ -1,6 +1,6 @@
 import os
 from motor.motor_asyncio import AsyncIOMotorClient
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 class MongoService:
     def __init__(self):
