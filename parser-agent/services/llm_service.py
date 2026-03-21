@@ -1,4 +1,5 @@
 import google.generativeai as genai
+from openai import OpenAI
 from shared.models import ParsedHousingData
 from typing import List, Optional
 import os
@@ -18,31 +19,31 @@ class LLMService:
         
         if not self.api_keys:
             print("Warning: No GEMINI_API_KEY found in environment.")
-            # Fallback to an empty list or a placeholder if needed, 
-            # but parse_housing_data will check again.
         
         self.current_key_idx = 0
         
-        # Models to cycle through
-        # Models to cycle through
-        # Updated with user-provided list (2.5, 3.1 series)
+        # Models to cycle through (Gemini)
         self.available_models = [
             "models/gemini-2.0-flash-exp", 
             "models/gemini-1.5-flash",
-            "models/gemini-2.5-pro", 
             "models/gemini-2.5-flash", 
             "models/gemini-2.5-flash-lite", 
-            "models/gemini-3.1-pro-preview", 
             "models/gemini-3.1-flash-lite-preview", 
             "models/gemini-3-flash-preview",
             "models/gemini-1.5-flash-8b"
         ]
         self.current_model_idx = 0
         
-        # Initial config
+        # Initial Gemini config
         if self.api_keys:
             genai.configure(api_key=self.api_keys[self.current_key_idx])
             self.model = genai.GenerativeModel(self.available_models[self.current_model_idx])
+            
+        # OpenAI Config
+        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        self.openai_client = None
+        if self.openai_api_key and self.openai_api_key != "your_openai_api_key_here":
+            self.openai_client = OpenAI(api_key=self.openai_api_key)
         
         self.mongo_service = MongoService()
 
@@ -69,42 +70,56 @@ class LLMService:
         new_key = self.api_keys[self.current_key_idx]
         print(f"🔑 Switching API Key to index {self.current_key_idx} (Ends in ...{new_key[-4:]})")
         genai.configure(api_key=new_key)
-        # Reset model point to start with the best model on the new key
         self.current_model_idx = 0
         self.model = genai.GenerativeModel(self.available_models[0])
         return True
 
-    async def parse_housing_data(self, text: str, api_key: str = None, expected_count: Optional[int] = None, job_id: str = None):
-        # If UI provided a key, use it as primary. Otherwise use our cycled keys.
-        if api_key:
-             genai.configure(api_key=api_key)
-             # If UI key is used, we don't cycle our internal list for this request
-        elif self.api_keys:
-             genai.configure(api_key=self.api_keys[self.current_key_idx])
-        else:
-             raise ValueError("No Gemini API key available.")
-        
+    async def parse_housing_data(self, text: str, api_key: str = None, expected_count: Optional[int] = None, job_id: str = None, provider: str = "gemini", model_name: Optional[str] = None):
         text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
         
+        # Configure Provider & Model
+        if provider == "openai":
+            client = OpenAI(api_key=api_key) if api_key else self.openai_client
+            active_model = model_name or "gpt-4o"
+            if active_model.startswith("models/"):
+                active_model = active_model.replace("models/", "")
+            
+            if not client:
+                await update_status(0, "ERROR_OPENAI_NOT_CONFIGURED")
+                return {"error": "OpenAI client not configured. Check OPENAI_API_KEY in .env"}
+        else:
+            client = genai
+            active_model = model_name or self.available_models[self.current_model_idx]
+            if api_key:
+                genai.configure(api_key=api_key)
+            elif self.api_keys:
+                genai.configure(api_key=self.api_keys[self.current_key_idx])
+            self.model = genai.GenerativeModel(active_model)
+
         # Helper to update progress
-        async def update_status(count: int, step: str):
+        async def update_status(count: int, step: str, error: str = None):
             if job_id:
                 try:
-                    current_model = self.available_models[self.current_model_idx]
+                    update_fields = {
+                        "count": count, 
+                        "step": step, 
+                        "total": expected_count, 
+                        "hash": text_hash,
+                        "model": active_model,
+                        "provider": provider,
+                        "key_idx": self.current_key_idx if provider == "gemini" and not api_key else -1,
+                        "partial_houses": all_houses[-20:] # Keep last few houses for preview/status
+                    }
+                    if error:
+                        update_fields["last_error"] = error
+                        
                     await self.mongo_service.db.job_status.update_one(
                         {"job_id": job_id},
-                        {"$set": {
-                            "count": count, 
-                            "step": step, 
-                            "total": expected_count, 
-                            "hash": text_hash,
-                            "model": current_model,
-                            "key_idx": self.current_key_idx if not api_key else -1
-                        }},
+                        {"$set": update_fields},
                         upsert=True
                     )
-                except:
-                    pass
+                except Exception as e:
+                    print(f"Failed to update status: {e}")
 
         try:
             cached_data = await self.mongo_service.get_cache(text_hash)
@@ -186,15 +201,28 @@ class LLMService:
                 for call_retry in range(5): # Increase retries for model switching
                     try:
                         await update_status(len(all_houses), f"AI_ANALYZING_CHUNK_{idx+1}")
-                        response = await self.model.generate_content_async(
-                            contents=prompt,
-                            generation_config=genai.GenerationConfig(
-                                response_mime_type="application/json",
+                        
+                        if provider == "openai":
+                            # OpenAI Parsing
+                            response = client.chat.completions.create(
+                                model=active_model,
+                                messages=[{"role": "user", "content": prompt}],
+                                response_format={ "type": "json_object" },
                                 temperature=0.2 if retry_count > 0 else 0.0
                             )
-                        )
+                            response_text = response.choices[0].message.content
+                        else:
+                            # Gemini Parsing
+                            response = await self.model.generate_content_async(
+                                contents=prompt,
+                                generation_config=genai.GenerationConfig(
+                                    response_mime_type="application/json",
+                                    temperature=0.2 if retry_count > 0 else 0.0
+                                )
+                            )
+                            response_text = response.text
                         
-                        parsed = json.loads(response.text)
+                        parsed = json.loads(response_text)
                         houses = parsed.get("houses", [])
                         
                         for h in houses:
@@ -211,7 +239,20 @@ class LLMService:
 
                     except Exception as e:
                         error_msg = str(e).lower()
-                        # Case 1: Model not found (404)
+                        
+                        # OpenAI specific error handling (simplified)
+                        if provider == "openai":
+                            if "429" in error_msg:
+                                wait_time = 30 + (call_retry * 15)
+                                print(f"OpenAI Rate limited. Waiting {wait_time}s...")
+                                await asyncio.sleep(wait_time)
+                                continue
+                            else:
+                                print(f"OpenAI Error: {e}")
+                                await update_status(len(all_houses), f"ERROR_CHUNK_{idx+1}", error=str(e))
+                                break
+
+                        # Case 1: Model not found (404) - Gemini
                         if "404" in error_msg:
                             model_switch_count += 1
                             if model_switch_count >= max_switches:
@@ -226,6 +267,7 @@ class LLMService:
                                 break
                                 
                             new_model = self._switch_model(remove_current=True)
+                            active_model = new_model
                             print(f"Model not found. Switched to {new_model}")
                             await update_status(len(all_houses), f"MODEL_NOT_FOUND_SWITCHING_TO_{new_model}")
                             await asyncio.sleep(2)
@@ -256,7 +298,7 @@ class LLMService:
                             continue
                         else:
                             print(f"Error in Chunk {idx+1}: {e}")
-                            await update_status(len(all_houses), f"ERROR_{idx+1}")
+                            await update_status(len(all_houses), f"ERROR_CHUNK_{idx+1}", error=str(e))
                             break
 
             final_houses = all_houses

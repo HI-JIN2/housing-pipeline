@@ -64,36 +64,41 @@ async def get_announcement_details(announcement_id: str):
 @router.post("/upload")
 async def upload_files(
     background_tasks: BackgroundTasks,
-    files: List[UploadFile] = File(...),
-    expected_count: Optional[int] = Form(None),
-    gemini_key: Optional[str] = Form(None),
-    x_job_id: Optional[str] = Header(None)
+    file: UploadFile = File(...),
+    x_job_id: str = Header(None),
+    x_gemini_key: str = Header(None),
+    x_provider: str = Header("gemini"),
+    x_model: str = Header(None)
 ):
-    if len(files) > 3:
-        raise HTTPException(status_code=400, detail="Maximum 3 files allowed")
+    """
+    고시공고 PDF 또는 엑셀 파일을 업로드하여 파싱합니다.
+    """
+    contents = await file.read()
+    filename = file.filename
+    
+    # 텍스트 추출 (PDF/XLSX)
+    text = ""
+    expected_count = None
+    
+    if filename.lower().endswith(".pdf"):
+        text = PDFService.extract_text(contents)
+    elif filename.lower().endswith((".xlsx", ".xls")):
+        text, expected_count = ExcelService.extract_text(contents)
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported file format. Only PDF and Excel files are allowed.")
 
-    try:
-        all_text = ""
-        for file in files:
-            content = await file.read()
-            if file.filename.lower().endswith('.pdf'):
-                all_text += PDFService.extract_text(content)
-            elif file.filename.lower().endswith(('.xlsx', '.xls')):
-                all_text += ExcelService.extract_text(content)
-        
-        # Parse data with LLM
-        # We pass job_id (from header) for real-time progress tracking
-        result = await llm_service.parse_housing_data(
-            all_text, 
-            api_key=gemini_key, 
-            expected_count=expected_count,
-            job_id=x_job_id
-        )
-        
-        return result
-    except Exception as e:
-        print(f"Upload error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    # 백그라운드에서 LLM 분석 수행
+    background_tasks.add_task(
+        llm_service.parse_housing_data,
+        text=text,
+        api_key=x_gemini_key,
+        expected_count=expected_count,
+        job_id=x_job_id,
+        provider=x_provider,
+        model_name=x_model
+    )
+    
+    return {"status": "processing", "job_id": x_job_id}
 
 @router.get("/status/{job_id}")
 async def get_job_status(job_id: str):
@@ -103,12 +108,29 @@ async def get_job_status(job_id: str):
         if not status:
             return {"count": 0, "step": "PENDING", "total": 0}
         
+        result_data = None
+        partial_result_data = []
+        error_message = None
+
+        if status.get("step") == "COMPLETED":
+            text_hash = status.get("hash")
+            if text_hash:
+                result_data = await mongo_service.get_cache(text_hash)
+        else:
+            # Provide incremental results and error if not completed
+            partial_result_data = status.get("partial_houses", [])
+            error_message = status.get("last_error")
+        
         return {
             "count": status.get("count", 0),
             "step": status.get("step", ""),
             "total": status.get("total", 0),
             "model": status.get("model", ""),
-            "key_idx": status.get("key_idx", -1)
+            "provider": status.get("provider", ""),
+            "key_idx": status.get("key_idx", -1),
+            "result": result_data,
+            "partial_result": partial_result_data,
+            "error": error_message
         }
     except Exception as e:
         return {"count": 0, "step": "ERROR", "detail": str(e)}
