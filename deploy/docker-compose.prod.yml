@@ -4,9 +4,6 @@ services:
   # Python Parser Agent
   parser-agent:
     image: ${DOCKER_IMAGE_PARSER:-parser-agent:latest}
-    build:
-      context: ../
-      dockerfile: parser-agent/Dockerfile
     restart: always
     environment:
       - MONGO_URL=mongodb://mongodb:27017
@@ -20,9 +17,6 @@ services:
   # Python Geo Agent
   geo-agent:
     image: ${DOCKER_IMAGE_GEO:-geo-agent:latest}
-    build:
-      context: ../
-      dockerfile: geo-agent/Dockerfile
     restart: always
     environment:
       - DATABASE_URL=postgresql://housing_user:housing_password@db:5432/housing_db
@@ -32,9 +26,6 @@ services:
   # Frontend (Vite + Nginx)
   frontend:
     image: ${DOCKER_IMAGE_FRONTEND:-frontend:latest}
-    build:
-      context: ../
-      dockerfile: frontend/Dockerfile
     restart: always
     ports:
       - "80:80"
