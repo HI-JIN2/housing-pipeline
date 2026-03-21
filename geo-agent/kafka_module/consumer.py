@@ -6,7 +6,7 @@ from services.kakao_api import KakaoGeoClient
 from services.db_service import DBService
 from shared.models import ParsedHousingData, EnrichedHousingData
 
-KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9093")
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9094")
 
 consumer = None
 db_service = DBService()

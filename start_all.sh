@@ -27,6 +27,10 @@ echo "======================================"
 echo "🚀 Housing Pipeline 전체 구동 스크립트"
 echo "======================================"
 
+echo "🧹 이전 좀비 프로세스 정리 중..."
+lsof -i :8000 -t | xargs kill -9 > /dev/null 2>&1 || true
+lsof -i :8001 -t | xargs kill -9 > /dev/null 2>&1 || true
+
 echo "[1/3] Docker Compose 인프라 (Kafka, PostGIS) 시작 중..."
 docker-compose up -d
 

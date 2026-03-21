@@ -13,12 +13,12 @@ class DBService:
             try:
                 self.pool = await asyncpg.create_pool(self.dsn)
                 print("Database connected gracefully")
-                break
+                await self._init_schema()
+                return
             except Exception as e:
                 print(f"Waiting for Postgres to initialize... ({i+1}/10) - {e}")
                 await asyncio.sleep(2)
         raise Exception("Could not connect to Database after 10 retries.")
-        await self._init_schema()
 
     async def close_pool(self):
         if self.pool:
