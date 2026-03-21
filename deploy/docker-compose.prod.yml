@@ -22,6 +22,7 @@ services:
     restart: always
     environment:
       - POSTGRES_DSN=postgresql://housing_user:housing_password@db:5432/housing_db
+      - KAKAO_REST_API_KEY=${KAKAO_REST_API_KEY}
     depends_on:
       - db
 
