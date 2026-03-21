@@ -11,9 +11,8 @@ class LLMService:
         if not self.api_key or self.api_key == "your_gemini_api_key_here":
             print("Warning: GEMINI_API_KEY is not set properly.")
         
-        genai.configure(api_key=self.api_key)
-        # Use gemini-1.5-flash-latest to avoid 404 with v1beta
-        self.model = genai.GenerativeModel("gemini-1.5-flash-latest")
+        # Use gemini-flash-latest base alias to fix 404 error with v1beta
+        self.model = genai.GenerativeModel("gemini-flash-latest")
         
         # Cache directory
         self.cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache")
