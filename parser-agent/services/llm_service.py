@@ -24,7 +24,19 @@ class LLMService:
         self.current_key_idx = 0
         
         # Models to cycle through
-        self.available_models = ["models/gemini-1.5-flash", "models/gemini-2.0-flash-exp", "models/gemini-1.5-flash-8b"]
+        # Models to cycle through
+        # Updated with user-provided list (2.5, 3.1 series)
+        self.available_models = [
+            "models/gemini-2.0-flash-exp", 
+            "models/gemini-1.5-flash",
+            "models/gemini-2.5-pro", 
+            "models/gemini-2.5-flash", 
+            "models/gemini-2.5-flash-lite", 
+            "models/gemini-3.1-pro-preview", 
+            "models/gemini-3.1-flash-lite-preview", 
+            "models/gemini-3-flash-preview",
+            "models/gemini-1.5-flash-8b"
+        ]
         self.current_model_idx = 0
         
         # Initial config
