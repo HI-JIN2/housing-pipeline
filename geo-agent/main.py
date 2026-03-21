@@ -35,9 +35,13 @@ def health_check():
 @app.post("/api/enrich")
 async def enrich_data(data: dict):
     print(f"Received data for enrichment: {data.get('name')} at {data.get('address')}")
-    # This replaces the Kafka consumer logic
     await enrich_and_save(data)
     return {"status": "success"}
+
+@app.get("/api/geocode")
+async def geocode_address(address: str):
+    lat, lng = await kakao_client.get_coordinates(address)
+    return {"lat": lat, "lng": lng}
 
 @app.delete("/api/housing/{announcement_id}")
 async def delete_housing_data(announcement_id: str):

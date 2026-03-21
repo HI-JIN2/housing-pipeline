@@ -18,7 +18,7 @@ def ping():
     return {"status": "pong", "message": "API server is reachable"}
 
 GEO_AGENT_URL = os.getenv("GEO_AGENT_URL", "http://localhost:8001/api/enrich")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "momstouch18!")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "PLEASE_SET_ADMIN_PASSWORD_IN_DOTENV")
 
 def verify_admin(x_admin_password: Optional[str] = Header(None)):
     if x_admin_password != ADMIN_PASSWORD:
@@ -35,6 +35,13 @@ def get_config():
 async def get_announcements():
     data = await mongo_service.get_recent_announcements(limit=20)
     return {"status": "success", "data": data}
+
+@router.get("/geocode")
+async def proxy_geocode(address: str):
+    async with httpx.AsyncClient() as client:
+        base = os.path.dirname(GEO_AGENT_URL)
+        res = await client.get(f"{base}/geocode", params={"address": address}, timeout=10.0)
+        return res.json()
 
 @router.get("/announcements/{announcement_id}")
 async def get_announcement_details(announcement_id: str):
