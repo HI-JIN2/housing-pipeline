@@ -38,8 +38,8 @@ GEMINI_API_KEY="발급받은 키 입력"
 KAKAO_API_KEY="발급받은 REST API 키 입력"
 
 # 설정 기본값
-KAFKA_BOOTSTRAP_SERVERS="localhost:9092"
-POSTGRES_DSN="postgresql://housing_user:housing_password@localhost:5432/housing_db"
+KAFKA_BOOTSTRAP_SERVERS="localhost:9093"
+POSTGRES_DSN="postgresql://housing_user:housing_password@localhost:5433/housing_db"
 MONGO_URL="mongodb://localhost:27017"
 ```
 

@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9093")
 kafka_producer = KafkaProducerClient(KAFKA_BOOTSTRAP_SERVERS)
 
 @asynccontextmanager
