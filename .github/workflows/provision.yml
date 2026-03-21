@@ -28,5 +28,5 @@ jobs:
           TF_VAR_compartment_ocid: ${{ secrets.OCI_COMPARTMENT_OCID }}
           TF_VAR_ssh_public_key: ${{ secrets.OCI_SSH_PUBLIC_KEY }}
         run: |
-          terraform init -reconfigure
+          terraform init -reconfigure -backend-config="address=${{ secrets.OCI_BACKEND_URL }}"
           terraform apply -auto-approve -lock=false
