@@ -77,69 +77,87 @@ async def upload_file(
         
         for file in files:
             filename = file.filename.lower()
-            if not (filename.endswith('.pdf') or filename.endswith('.xlsx')):
-                continue
-
             file_bytes = await file.read()
             
             if filename.endswith('.pdf'):
                 extracted_text = PDFService.extract_text(file_bytes)
-            else:
+            elif filename.endswith('.xlsx'):
                 extracted_text = ExcelService.extract_text(file_bytes)
+            else:
+                continue
                 
             if not extracted_text.strip():
                 continue
                 
-            try:
-                parsed_result = await llm_service.parse_housing_data(
-                    extracted_text, 
-                    api_key=gemini_key, 
-                    expected_count=expected_count
-                )
-                if parsed_result:
-                    houses = parsed_result.get("houses", [])
-                    all_houses.extend(houses)
-                    # Use the first available title/desc as the set's metadata
-                    if not announcement_title:
-                        announcement_title = parsed_result.get("announcement_title")
-                    if not announcement_desc:
-                        announcement_desc = parsed_result.get("announcement_description")
-            except ValueError as ve:
-                raise HTTPException(status_code=400, detail=str(ve))
-
-        if not all_houses:
-            return {"status": "warning", "message": "No housing data successfully parsed from the provided files"}
-
-        # Store as ONE unified announcement set
-        await mongo_service.save_announcement({
-            "filenames": [f.filename for f in files],
-            "announcement_title": announcement_title or files[0].filename,
-            "announcement_description": announcement_desc,
-            "parsed_houses": all_houses
-        })
-
-        # 3. Geo Agent에게 병렬 전송 (HTTP POST)
-        async with httpx.AsyncClient() as client:
-            tasks = []
-            for data in all_houses:
-                tasks.append(client.post(GEO_AGENT_URL, json=data, timeout=60.0))
-            
-            responses = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            published_count = 0
-            for i, response in enumerate(responses):
-                if isinstance(response, Exception):
-                    print(f"Error calling Geo Agent for {all_houses[i].get('name')}: {response}")
-                elif response.status_code == 200:
-                    published_count += 1
-                else:
-                    print(f"Geo Agent returned {response.status_code} for {all_houses[i].get('name')}")
+            parsed_result = await llm_service.parse_housing_data(
+                extracted_text, 
+                api_key=gemini_key, 
+                expected_count=expected_count
+            )
+            if parsed_result:
+                houses = parsed_result.get("houses", [])
+                all_houses.extend(houses)
+                if not announcement_title:
+                    announcement_title = parsed_result.get("announcement_title")
+                if not announcement_desc:
+                    announcement_desc = parsed_result.get("announcement_description")
 
         return {
             "status": "success",
-            "message": f"Successfully parsed and enriched {published_count} records",
-            "data": all_houses
+            "announcement_title": announcement_title or "Untitled Announcement",
+            "announcement_description": announcement_desc,
+            "houses": all_houses
         }
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/save")
+async def save_announcement(data: dict):
+    announcement_title = data.get("announcement_title", "Untitled")
+    houses = data.get("houses", [])
+    
+    if not houses:
+        raise HTTPException(status_code=400, detail="No houses to save")
+
+    # 1. Save to Mongo
+    # Use title as a stable identifier for duplicate prevention in Mongo if needed,
+    # or just create a new one. Here we create a new one or update existing by title.
+    announcement_id = str(uuid.uuid4()) # For internal grouping
+    
+    await mongo_service.save_announcement({
+        "announcement_title": announcement_title,
+        "announcement_description": data.get("announcement_description"),
+        "parsed_houses": houses,
+        "created_at": str(uuid.uuid1()) # Timestamp surrogate
+    })
+
+    # 2. Sync to Geo Agent (Postgres)
+    # First, delete existing data for this title to avoid duplicates
+    async with httpx.AsyncClient() as client:
+        await client.delete(f"{os.path.dirname(GEO_AGENT_URL)}/housing/{announcement_title}")
+        
+        tasks = []
+        for house in houses:
+            house['announcement_id'] = announcement_title
+            tasks.append(client.post(GEO_AGENT_URL, json=house, timeout=60.0))
+        
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    return {"status": "success", "message": f"Saved {len(houses)} records"}
+
+@router.delete("/announcements/{announcement_id}")
+async def delete_announcement(announcement_id: str):
+    # 1. Get title from Mongo first to clean up Postgres
+    doc = await mongo_service.get_announcement(announcement_id)
+    if doc:
+        title = doc.get("announcement_title")
+        if title:
+            async with httpx.AsyncClient() as client:
+                await client.delete(f"{os.path.dirname(GEO_AGENT_URL)}/housing/{title}")
+    
+    # 2. Delete from Mongo
+    success = await mongo_service.delete_announcement(announcement_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Announcement not found")
+        
+    return {"status": "success"}
