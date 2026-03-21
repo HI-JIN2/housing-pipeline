@@ -32,8 +32,21 @@ class MongoService:
         
         summary = []
         for doc in results:
+            filename = doc.get("filename", "Unknown")
+            houses = doc.get("parsed_houses", [])
+            house_count = len(houses)
+            
+            # Use the first house's name as the announcement title
+            title = filename
+            description = ""
+            if house_count > 0:
+                title = houses[0].get("name", filename)
+                description = houses[0].get("address", "")
+                
             summary.append({
-                "filename": doc.get("filename", "Unknown"),
-                "house_count": len(doc.get("parsed_houses", []))
+                "filename": filename,
+                "title": title,
+                "description": description,
+                "house_count": house_count
             })
         return summary

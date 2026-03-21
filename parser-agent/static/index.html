@@ -322,16 +322,36 @@
                 json.data.forEach(item => {
                     const li = document.createElement('li');
                     
-                    const nameSpan = document.createElement('span');
-                    nameSpan.className = 'history-name';
-                    nameSpan.textContent = item.filename;
-                    nameSpan.title = item.filename;
+                    const infoDiv = document.createElement('div');
+                    infoDiv.className = 'history-info';
+                    infoDiv.style.display = 'flex';
+                    infoDiv.style.flexDirection = 'column';
+                    infoDiv.style.maxWidth = '75%';
+                    
+                    const titleDiv = document.createElement('div');
+                    titleDiv.className = 'history-name';
+                    titleDiv.style.maxWidth = '100%';
+                    titleDiv.textContent = item.title;
+                    titleDiv.title = item.title;
+                    
+                    const descDiv = document.createElement('div');
+                    descDiv.textContent = item.filename;
+                    descDiv.style.fontSize = '0.8rem';
+                    descDiv.style.color = '#64748b';
+                    descDiv.style.marginTop = '0.25rem';
+                    descDiv.style.whiteSpace = 'nowrap';
+                    descDiv.style.overflow = 'hidden';
+                    descDiv.style.textOverflow = 'ellipsis';
+                    descDiv.title = item.filename;
+
+                    infoDiv.appendChild(titleDiv);
+                    infoDiv.appendChild(descDiv);
                     
                     const countSpan = document.createElement('span');
                     countSpan.className = 'history-count';
                     countSpan.textContent = `${item.house_count}건`;
                     
-                    li.appendChild(nameSpan);
+                    li.appendChild(infoDiv);
                     li.appendChild(countSpan);
                     historyList.appendChild(li);
                 });
