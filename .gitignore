@@ -1,5 +1,11 @@
-/.env
-*.pyc
-__pycache__/
 *.pyo
-*.pydparser-agent/cache/
+*.pyd
+parser-agent/cache/
+*.tfvars
+.terraform/
+terraform.tfstate*
+oci_key*
+node_modules/
+dist/
+.env
+*.pyc
