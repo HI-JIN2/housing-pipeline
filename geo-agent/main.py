@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from contextlib import asynccontextmanager
 import asyncio
 import os
@@ -11,6 +11,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from services.enrich_service import enrich_and_save, db_service
+from services.kakao_api import KakaoGeoClient
+
+kakao_client = KakaoGeoClient()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -40,8 +43,12 @@ async def enrich_data(data: dict):
 
 @app.get("/api/geocode")
 async def geocode_address(address: str):
-    lat, lng = await kakao_client.get_coordinates(address)
-    return {"lat": lat, "lng": lng}
+    try:
+        lat, lng = await kakao_client.get_coordinates(address)
+        return {"lat": lat, "lng": lng}
+    except Exception as e:
+        print(f"Geocoding failed for address '{address}': {e}")
+        raise HTTPException(status_code=502, detail=f"Geo Agent Error: {str(e)}")
 
 @app.delete("/api/housing/{announcement_id}")
 async def delete_housing_data(announcement_id: str):

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Header, BackgroundTasks
+from fastapi import FastAPI, APIRouter, UploadFile, File, Form, HTTPException, Header, BackgroundTasks
 from typing import Optional, List
 import httpx
 import asyncio
@@ -40,8 +40,18 @@ async def get_announcements():
 async def proxy_geocode(address: str):
     async with httpx.AsyncClient() as client:
         base = os.path.dirname(GEO_AGENT_URL)
-        res = await client.get(f"{base}/geocode", params={"address": address}, timeout=10.0)
-        return res.json()
+        try:
+            res = await client.get(f"{base}/geocode", params={"address": address}, timeout=10.0)
+            res.raise_for_status()
+            return res.json()
+        except Exception as e:
+            print(f"Proxy geocode failed for address '{address}': {e}")
+            # Try to get more detail from response if possible
+            error_detail = str(e)
+            if 'res' in locals() and res.content:
+                try: error_detail = res.json().get('detail', str(e))
+                except: pass
+            raise HTTPException(status_code=502, detail=f"Geo Agent Error: {error_detail}")
 
 @router.get("/announcements/{announcement_id}")
 async def get_announcement_details(announcement_id: str):
