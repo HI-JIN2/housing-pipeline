@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from services.enrich_service import enrich_and_save, db_service
+from .services.enrich_service import enrich_and_save, db_service
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

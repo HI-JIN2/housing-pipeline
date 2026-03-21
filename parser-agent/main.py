@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from services.db_service import DBService
+from .services.db_service import DBService
 db_service = DBService()
 
 @asynccontextmanager
@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Parser Agent (공고zip)", lifespan=lifespan)
 
-from api.routes import router as api_router
+from .api.routes import router as api_router
 app.include_router(api_router, prefix="/api")
 
 # Serve UI
