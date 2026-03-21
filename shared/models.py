@@ -6,8 +6,8 @@ class ParsedHousingData(BaseModel):
     name: str = Field(description="아파트/주택 이름")
     address: str = Field(description="주택 상세 주소")
     house_type: str = Field(description="주택 유형 (예: 59A, 투룸 등)")
-    deposit: int = Field(description="보증금 (단위: 만원)")
-    monthly_rent: int = Field(description="월세 (단위: 만원)")
+    deposit: float = Field(description="보증금 (단위: 만원)")
+    monthly_rent: float = Field(description="월세 (단위: 만원)")
     raw_text_reference: Optional[str] = Field(None, description="파싱에 사용된 원본 텍스트 조각")
     extra_info: dict = Field(default_factory=dict, description="기타 추가 정보 (방 개수, 주차, 승강기 등)")
 

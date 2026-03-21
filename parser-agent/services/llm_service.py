@@ -366,6 +366,7 @@ class LLMService:
                 break
 
         valid_houses = []
+        skip_count = 0
         for index, item in enumerate(final_houses):
             try:
                 house_identity = f"{final_title}|{item.get('name')}|{item.get('address')}|{item.get('house_type')}|{item.get('deposit')}"
@@ -374,7 +375,14 @@ class LLMService:
                 item["id"] = f"h-{stable_id}-{index}"
                 valid_houses.append(ParsedHousingData(**item).model_dump())
             except Exception as e:
-                pass
+                skip_count += 1
+                if skip_count <= 5:
+                    print(f"⚠️ Validation skipped for item {index}: {e}")
+                elif skip_count == 6:
+                    print("⚠️ More validation errors suppressed...")
+        
+        if skip_count > 0:
+            print(f"❌ Total {skip_count} items skipped due to validation errors.")
 
         final_result = {
             "announcement_title": final_title,
