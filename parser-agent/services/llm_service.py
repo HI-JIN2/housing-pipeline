@@ -13,14 +13,15 @@ class LLMService:
             print("Warning: GEMINI_API_KEY is not set properly.")
         
         # Models to cycle through if quota is hit
-        # Using -latest suffixes for better compatibility with different API versions
-        self.available_models = ["gemini-1.5-flash-latest", "gemini-2.0-flash-exp", "gemini-1.5-flash-8b-latest"]
+        # Adding 'models/' prefix explicitly for v1/v1beta compatibility
+        self.available_models = ["models/gemini-1.5-flash", "models/gemini-2.0-flash-exp", "models/gemini-1.5-flash-8b"]
         self.current_model_idx = 0
         self.model = genai.GenerativeModel(self.available_models[self.current_model_idx])
         
         self.mongo_service = MongoService()
 
     def _switch_model(self):
+        # Move to next model
         self.current_model_idx = (self.current_model_idx + 1) % len(self.available_models)
         model_name = self.available_models[self.current_model_idx]
         print(f"🔄 Switching model to: {model_name}")
@@ -129,8 +130,11 @@ class LLMService:
                 {chunk_text}
                 """
                 
+                model_switch_count = 0
+                max_switches = len(self.available_models)
+
                 # Rate-limit aware call with 429 handling
-                for call_retry in range(3):
+                for call_retry in range(5): # Increase retries for model switching
                     try:
                         await update_status(len(all_houses), f"AI_ANALYZING_CHUNK_{idx+1}")
                         response = await self.model.generate_content_async(
@@ -160,6 +164,12 @@ class LLMService:
                         error_msg = str(e).lower()
                         # Case 1: Model not found (404)
                         if "404" in error_msg:
+                            model_switch_count += 1
+                            if model_switch_count >= max_switches:
+                                print(f"All models returned 404 for chunk {idx+1}. Skipping chunk.")
+                                await update_status(len(all_houses), f"ERROR_ALL_MODELS_404_CHUNK_{idx+1}")
+                                break
+                                
                             new_model = self._switch_model()
                             print(f"Model not found. Switched to {new_model}")
                             await update_status(len(all_houses), f"MODEL_NOT_FOUND_SWITCHING_TO_{new_model}")
