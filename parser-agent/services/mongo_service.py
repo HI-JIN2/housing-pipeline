@@ -16,7 +16,7 @@ class MongoService:
             return doc["data"]
         return None
 
-    async def save_cache(self, text_hash: str, data: List[Dict[str, Any]]):
+    async def save_cache(self, text_hash: str, data: Dict[str, Any]):
         await self.cache_collection.update_one(
             {"text_hash": text_hash},
             {"$set": {"text_hash": text_hash, "data": data}},
@@ -27,7 +27,7 @@ class MongoService:
         await self.announcements_collection.insert_one(announcement_data)
 
     async def get_recent_announcements(self, limit: int = 10) -> List[Dict[str, Any]]:
-        cursor = self.announcements_collection.find({}, {"_id": 1, "filename": 1, "parsed_houses": 1}).sort([("_id", -1)]).limit(limit)
+        cursor = self.announcements_collection.find({}, {"_id": 1, "filename": 1, "parsed_houses": 1, "announcement_title": 1, "announcement_description": 1}).sort([("_id", -1)]).limit(limit)
         results = await cursor.to_list(length=limit)
         
         summary = []
@@ -36,10 +36,12 @@ class MongoService:
             houses = doc.get("parsed_houses", [])
             house_count = len(houses)
             
-            # Use the first house's name as the announcement title
-            title = filename
-            description = ""
-            if house_count > 0:
+            # Use the extracted announcement title if available
+            title = doc.get("announcement_title") or filename
+            description = doc.get("announcement_description") or ""
+            
+            if not doc.get("announcement_title") and house_count > 0:
+                # Fallback to first house name for older records
                 first_house = houses[0]
                 title = first_house.get("name", filename)
                 
@@ -48,12 +50,7 @@ class MongoService:
                     parts.append(first_house.get("house_type"))
                 if first_house.get("address"):
                     parts.append(first_house.get("address"))
-                if first_house.get("raw_text_reference"):
-                    raw = first_house.get("raw_text_reference").replace("\n", " ")
-                    raw = raw[:60] + "..." if len(raw) > 60 else raw
-                    parts.append(raw)
-                
-                description = " | ".join(parts) if parts else filename
+                description = " | ".join(parts) if parts else ""
                 
             summary.append({
                 "id": str(doc["_id"]),

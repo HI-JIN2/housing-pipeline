@@ -59,15 +59,18 @@ async def upload_file(files: list[UploadFile] = File(...), gemini_key: Optional[
                 
             # 2. LLM 구조화
             try:
-                parsed_data = await llm_service.parse_housing_data(extracted_text, api_key=gemini_key)
-                if parsed_data:
-                    housing_data_list.extend(parsed_data)
+                parsed_result = await llm_service.parse_housing_data(extracted_text, api_key=gemini_key)
+                if parsed_result:
+                    houses = parsed_result.get("houses", [])
+                    housing_data_list.extend(houses)
                     
                     # Store full announcement for future flexibility
                     await mongo_service.save_announcement({
                         "filename": filename,
                         "raw_text": extracted_text,
-                        "parsed_houses": [d.model_dump() for d in parsed_data]
+                        "announcement_title": parsed_result.get("announcement_title"),
+                        "announcement_description": parsed_result.get("announcement_description"),
+                        "parsed_houses": houses
                     })
             except ValueError as ve:
                 raise HTTPException(status_code=400, detail=str(ve))
@@ -79,7 +82,7 @@ async def upload_file(files: list[UploadFile] = File(...), gemini_key: Optional[
         published_count = 0
         async with httpx.AsyncClient() as client:
             for data in housing_data_list:
-                message = data.model_dump()
+                message = data
                 try:
                     # Geo Agent의 신규 엔드포인트로 JSON 전송
                     response = await client.post(GEO_AGENT_URL, json=message, timeout=10.0)
@@ -93,7 +96,7 @@ async def upload_file(files: list[UploadFile] = File(...), gemini_key: Optional[
         return {
             "status": "success",
             "message": f"Successfully parsed and enriched {published_count} records via Geo Agent",
-            "data": [d.model_dump() for d in housing_data_list]
+            "data": housing_data_list
         }
 
     except Exception as e:
