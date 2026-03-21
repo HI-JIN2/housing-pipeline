@@ -76,26 +76,13 @@ class LLMService:
         self.active_gemini_model = self.available_models[0]
         return True
 
-    def _chunk_text(self, text: str, chunk_size: int = 15000) -> List[str]:
-        # Split by page marker if available
-        pages = text.split("--- PAGE ")
+    def _chunk_text(self, text: str, chunk_size: int = 12000, overlap: int = 2000) -> List[str]:
+        # Simple character-based chunking with overlap for robustness
         chunks = []
-        current_chunk = ""
-        
-        for p in pages:
-            if not p: continue
-            page_content = "--- PAGE " + p
-            # If a single page is bigger than chunk_size, we just have to take it (Gemini supports it)
-            if len(current_chunk) + len(page_content) < chunk_size:
-                current_chunk += page_content + "\n"
-            else:
-                if current_chunk:
-                    chunks.append(current_chunk.strip())
-                current_chunk = page_content + "\n"
-        
-        if current_chunk:
-            chunks.append(current_chunk.strip())
-            
+        for i in range(0, len(text), chunk_size - overlap):
+            chunks.append(text[i:i + chunk_size])
+            if i + chunk_size >= len(text):
+                break
         return chunks
 
     async def parse_housing_data(self, text: str, expected_count: Optional[int] = None, job_id: Optional[str] = None, provider: str = "gemini", model_name: Optional[str] = None, api_key: Optional[str] = None):
