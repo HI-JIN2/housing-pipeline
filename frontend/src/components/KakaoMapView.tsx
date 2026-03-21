@@ -26,10 +26,38 @@ const KakaoMapView: React.FC<MapProps> = ({ houses, selectedHouseId }) => {
   const markersRef = useRef<{ [key: string]: any }>({});
   const infoWindowsRef = useRef<{ [key: string]: any }>({});
 
+  const applySelection = (id: string | null | undefined) => {
+    if (!id || !mapInstance.current || !markersRef.current[id]) {
+      console.log("⏭️ applySelection skipped", {
+        id, 
+        hasMap: !!mapInstance.current, 
+        hasMarker: id ? !!markersRef.current[id] : false
+      });
+      return;
+    }
+
+    const map = mapInstance.current;
+    const marker = markersRef.current[id];
+    const infowindow = infoWindowsRef.current[id];
+    
+    const position = marker.getPosition();
+    map.setCenter(position);
+    map.setLevel(3); // Zoom in
+    
+    // Close all other info windows
+    Object.values(infoWindowsRef.current).forEach((iw: any) => iw.close());
+    infowindow.open(map, marker);
+    console.log("✨ Centered on marker:", id);
+  };
+
   // Initialize Map
   useEffect(() => {
     const initMap = () => {
-      if (!mapContainer.current || !window.kakao || !window.kakao.maps) return;
+      console.log("📍 initMap called with houses:", houses.length);
+      if (!mapContainer.current || !window.kakao || !window.kakao.maps) {
+        console.log("🚫 Map init blocked:", {container: !!mapContainer.current, kakao: !!window.kakao});
+        return;
+      }
 
       const validHouses = houses.filter(h => h.lat && h.lng);
       const center = validHouses.length > 0 
@@ -59,9 +87,9 @@ const KakaoMapView: React.FC<MapProps> = ({ houses, selectedHouseId }) => {
         });
 
         const iwContent = `
-          <div style="padding:10px; min-width:150px; border-radius:8px; border:none; background:white; font-family:sans-serif;">
-            <h4 style="margin:0; font-size:14px; font-weight:bold; color:#333;">${house.name}</h4>
-            <p style="margin:4px 0 0; font-size:12px; color:#666;">${house.house_type}</p>
+          <div style="padding:10px; min-width:150px; border-radius:12px; border:none; background:white; font-family:sans-serif; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);">
+            <h4 style="margin:0; font-size:14px; font-weight:bold; color:#1e293b;">${house.name}</h4>
+            <p style="margin:4px 0 0; font-size:11px; color:#64748b;">${house.house_type}</p>
           </div>
         `;
         const infowindow = new window.kakao.maps.InfoWindow({
@@ -70,7 +98,6 @@ const KakaoMapView: React.FC<MapProps> = ({ houses, selectedHouseId }) => {
         });
 
         window.kakao.maps.event.addListener(marker, 'click', () => {
-          // Close all other info windows first
           Object.values(infoWindowsRef.current).forEach((iw: any) => iw.close());
           infowindow.open(map, marker);
         });
@@ -82,8 +109,15 @@ const KakaoMapView: React.FC<MapProps> = ({ houses, selectedHouseId }) => {
         hasMarkers = true;
       });
 
+      console.log(`✅ ${Object.keys(markersRef.current).length} markers created.`);
+
       if (hasMarkers) {
         map.setBounds(bounds);
+      }
+
+      // 🚨 CRITICAL: Apply selection AFTER markers are created
+      if (selectedHouseId) {
+        setTimeout(() => applySelection(selectedHouseId), 100);
       }
     };
 
@@ -94,19 +128,8 @@ const KakaoMapView: React.FC<MapProps> = ({ houses, selectedHouseId }) => {
 
   // Handle selection change
   useEffect(() => {
-    if (selectedHouseId && mapInstance.current && markersRef.current[selectedHouseId]) {
-      const map = mapInstance.current;
-      const marker = markersRef.current[selectedHouseId];
-      const infowindow = infoWindowsRef.current[selectedHouseId];
-      
-      const position = marker.getPosition();
-      map.setCenter(position);
-      map.setLevel(3); // Zoom in
-      
-      // Close all other info windows
-      Object.values(infoWindowsRef.current).forEach((iw: any) => iw.close());
-      infowindow.open(map, marker);
-    }
+    console.log("🎯 Selection effect triggered:", selectedHouseId);
+    applySelection(selectedHouseId);
   }, [selectedHouseId]);
 
   return (
