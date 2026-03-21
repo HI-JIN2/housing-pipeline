@@ -35,47 +35,39 @@ class LLMService:
         except Exception as e:
             print(f"Error reading mongo cache: {e}")
 
-        # --- Chunking Implementation ---
-        # 261 items can be huge. We split the text into chunks of ~10,000 chars.
-        chunk_size = 10000
-        overlap = 1000
+        # --- Deep Chunking Implementation ---
+        # 261 items is a lot. Smaller chunks (4k) with high overlap (1.5k) ensure Gemini doesn't get overwhelmed.
+        chunk_size = 4000
+        overlap = 1500
         chunks = []
         for i in range(0, len(text), chunk_size - overlap):
             chunks.append(text[i:i + chunk_size])
             if i + chunk_size >= len(text):
                 break
 
-        print(f"Divided text into {len(chunks)} chunks for processing.")
+        print(f"Total text length: {len(text)}. Divided into {len(chunks)} smaller chunks (size={chunk_size}, overlap={overlap})")
         
         all_houses = []
         final_title = ""
         final_description = ""
+        seen_ids = set() # Prevent duplicates from overlap
         
         for idx, chunk_text in enumerate(chunks):
             print(f"Processing chunk {idx+1}/{len(chunks)}...")
-            count_instruction = f"This is part {idx+1} of a large document. Extract ALL housing units found in THIS SPECIFIC TEXT."
             
             prompt = f"""
-            You are an expert real estate data extraction agent. 
-            Extract structural information for EVERY housing unit mentioned in the provided text snippet.
+            You are a rigorous data extraction robot. 
+            Extract ALL housing units mentioned in the text below. 
             
-            {count_instruction}
+            [CHUNK INFO] Part {idx+1} of {len(chunks)}.
+            [EXPECTED TOTAL] Around {expected_count or "hundreds"}.
 
-            [CRITICAL INSTRUCTIONS]
-            1. **Completeness**: Do not skip any items in this chunk.
-            2. **JSON SCHEMA**: 
-               Extract each item into:
-               - id, name, address, house_type, deposit (만원), monthly_rent (만원), raw_text_reference, extra_info (dict)
-
-            [OUTPUT FORMAT]
-            Return ONLY a single valid JSON object:
-            {{
-                "announcement_title": "string",
-                "announcement_description": "string",
-                "houses": [ ... ]
-            }}
+            [MUST-FOLLOW RULES]
+            1. **Exhaustive Extraction**: Extract EVERY SINGLE ROW/ITEM. Do not summarize. Do not skip. Even if there are 50 items in this chunk, list all 50.
+            2. **JSON Format**: Return ONLY a valid JSON object.
+            3. **Fields**: id, name, address, house_type, deposit (만원), monthly_rent (만원), raw_text_reference, extra_info (dict).
             
-            [TEXT CHUNK TO PROCESS]
+            [TEXT CHUNK]
             {chunk_text}
             """
             
@@ -83,24 +75,27 @@ class LLMService:
                 response = await self.model.generate_content_async(
                     contents=prompt,
                     generation_config=genai.GenerationConfig(
-                        response_mime_type="application/json"
+                        response_mime_type="application/json",
+                        temperature=0.1 # Lower temperature for higher accuracy
                     )
                 )
                 
                 parsed = json.loads(response.text)
                 houses = parsed.get("houses", [])
-                if not isinstance(houses, list):
-                    # Fallback
-                    for k, v in parsed.items():
-                        if isinstance(v, list):
-                            houses = v
-                            break
-                            
-                all_houses.extend(houses)
-                if not final_title:
-                    final_title = parsed.get("announcement_title", "")
-                if not final_description:
-                    final_description = parsed.get("announcement_description", "")
+                
+                chunk_added = 0
+                for h in houses:
+                    # Create a unique key to avoid duplicates from overlaps
+                    h_key = f"{h.get('name')}-{h.get('address')}-{h.get('house_type')}"
+                    if h_key not in seen_ids:
+                        all_houses.append(h)
+                        seen_ids.add(h_key)
+                        chunk_added += 1
+                
+                print(f"Chunk {idx+1}: Found {len(houses)} items, added {chunk_added} new items. (Total so far: {len(all_houses)})")
+                
+                if not final_title: final_title = parsed.get("announcement_title", "")
+                if not final_description: final_description = parsed.get("announcement_description", "")
                     
             except Exception as e:
                 print(f"Error parsing chunk {idx+1}: {e}")
@@ -108,13 +103,14 @@ class LLMService:
 
         # Convert to Pydantic models to validate and then dump
         valid_houses = []
-        for item in all_houses:
+        for index, item in enumerate(all_houses):
             try:
-                # Basic cleanup
-                if not item.get("id"): item["id"] = f"house-{hashlib.md5(str(item).encode()).hexdigest()[:8]}"
+                # Ensure unique ID
+                item["id"] = f"house-{idx}-{index}"
                 valid_houses.append(ParsedHousingData(**item).model_dump())
             except Exception as e:
-                print(f"Validation failed for one item: {e}")
+                # Silently skip bad items in the final list
+                pass
 
         final_result = {
             "announcement_title": final_title,
@@ -125,7 +121,7 @@ class LLMService:
         # Save to MongoDB cache
         try:
             await self.mongo_service.save_cache(text_hash, final_result)
-            print(f"Saved total {len(valid_houses)} results to MongoDB cache.")
+            print(f"COMPLETED: Total {len(valid_houses)} results saved.")
         except Exception as e:
             print(f"Error writing mongo cache: {e}")
             
