@@ -60,6 +60,15 @@ jobs:
           username: ubuntu
           key: ${{ secrets.OCI_SSH_KEY }}
           script: |
+            # Create 2GB Swap file if it doesn't exist (for 1GB RAM stability)
+            if [ ! -f /swapfile ]; then
+              sudo fallocate -l 2G /swapfile
+              sudo chmod 600 /swapfile
+              sudo mkswap /swapfile
+              sudo swapon /swapfile
+              echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+            fi
+
             mkdir -p /home/ubuntu/housing-pipeline
             cd /home/ubuntu/housing-pipeline
             
