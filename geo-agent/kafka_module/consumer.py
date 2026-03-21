@@ -25,7 +25,17 @@ async def start_consumer():
         auto_offset_reset="earliest"
     )
     
-    await consumer.start()
+    import asyncio
+    for i in range(15):
+        try:
+            await consumer.start()
+            print(f"Kafka Consumer started successfully on {KAFKA_BOOTSTRAP_SERVERS}")
+            break
+        except Exception as e:
+            print(f"Waiting for Kafka to be ready (Consumer)... ({i+1}/15) - {e}")
+            await asyncio.sleep(3)
+    else:
+        raise RuntimeError(f"Could not connect Kafka Consumer after 15 retries")
     print("Kafka Consumer started listening to parsed_data")
     try:
         async for msg in consumer:
