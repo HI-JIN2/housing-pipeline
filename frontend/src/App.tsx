@@ -300,12 +300,12 @@ const App: React.FC = () => {
         href="https://qr.kakaopay.com/Ej88F1kMG" 
         target="_blank" 
         rel="noreferrer"
-        className="fixed bottom-8 right-8 group hover:-translate-y-1 transition-transform z-50 flex"
+        className="fixed bottom-8 right-8 group hover:-translate-y-1 transition-transform z-50 flex items-center justify-center p-0 overflow-hidden bg-transparent"
       >
         <img 
           src="http://localhost:8000/static/images/btn_send_regular.png" 
           alt="카카오페이" 
-          className="h-12 shadow-lg rounded-xl block m-0 p-0"
+          className="h-12 block filter drop-shadow-md rounded-xl"
           onError={(e) => (e.currentTarget.style.display = 'none')}
         />
       </a>
