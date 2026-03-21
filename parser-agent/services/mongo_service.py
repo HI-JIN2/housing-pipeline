@@ -25,3 +25,15 @@ class MongoService:
 
     async def save_announcement(self, announcement_data: Dict[str, Any]):
         await self.announcements_collection.insert_one(announcement_data)
+
+    async def get_recent_announcements(self, limit: int = 10) -> List[Dict[str, Any]]:
+        cursor = self.announcements_collection.find({}, {"_id": 0, "filename": 1, "parsed_houses": 1}).sort([("_id", -1)]).limit(limit)
+        results = await cursor.to_list(length=limit)
+        
+        summary = []
+        for doc in results:
+            summary.append({
+                "filename": doc.get("filename", "Unknown"),
+                "house_count": len(doc.get("parsed_houses", []))
+            })
+        return summary

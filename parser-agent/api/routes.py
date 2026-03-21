@@ -22,6 +22,11 @@ def get_config():
     has_key = bool(api_key and api_key != "your_gemini_api_key_here")
     return {"has_gemini_key": has_key}
 
+@router.get("/announcements")
+async def get_announcements():
+    data = await mongo_service.get_recent_announcements(limit=20)
+    return {"status": "success", "data": data}
+
 @router.post("/upload")
 async def upload_file(files: list[UploadFile] = File(...), gemini_key: Optional[str] = Form(None)):
     if len(files) > 3:
