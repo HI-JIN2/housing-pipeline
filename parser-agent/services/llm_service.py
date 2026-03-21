@@ -46,8 +46,15 @@ class LLMService:
         
         self.mongo_service = MongoService()
 
-    def _switch_model(self):
-        self.current_model_idx = (self.current_model_idx + 1) % len(self.available_models)
+    def _switch_model(self, remove_current=False):
+        if remove_current and len(self.available_models) > 1:
+            removed = self.available_models.pop(self.current_model_idx)
+            print(f"🚫 Removing unsupported model: {removed}")
+            if self.current_model_idx >= len(self.available_models):
+                self.current_model_idx = 0
+        else:
+            self.current_model_idx = (self.current_model_idx + 1) % len(self.available_models)
+            
         model_name = self.available_models[self.current_model_idx]
         print(f"🔄 Switching model to: {model_name}")
         self.model = genai.GenerativeModel(model_name)
@@ -218,7 +225,7 @@ class LLMService:
                                 await update_status(len(all_houses), f"ERROR_ALL_MODELS_404_CHUNK_{idx+1}")
                                 break
                                 
-                            new_model = self._switch_model()
+                            new_model = self._switch_model(remove_current=True)
                             print(f"Model not found. Switched to {new_model}")
                             await update_status(len(all_houses), f"MODEL_NOT_FOUND_SWITCHING_TO_{new_model}")
                             await asyncio.sleep(2)
