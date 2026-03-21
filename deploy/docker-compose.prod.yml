@@ -7,10 +7,12 @@ services:
     restart: always
     environment:
       - MONGO_URL=mongodb://mongodb:27017
+      - POSTGRES_DSN=postgresql://housing_user:housing_password@db:5432/housing_db
       - GEO_AGENT_URL=http://geo-agent:8001/api/enrich
       - GEMINI_API_KEY=${GEMINI_API_KEY}
     depends_on:
       - mongodb
+      - db
     ports:
       - "8000:8000"
 
@@ -19,7 +21,7 @@ services:
     image: ${DOCKER_IMAGE_GEO:-geo-agent:latest}
     restart: always
     environment:
-      - DATABASE_URL=postgresql://housing_user:housing_password@db:5432/housing_db
+      - POSTGRES_DSN=postgresql://housing_user:housing_password@db:5432/housing_db
     depends_on:
       - db
 
