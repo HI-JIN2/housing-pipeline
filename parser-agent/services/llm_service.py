@@ -1,6 +1,6 @@
 import google.generativeai as genai
 from shared.models import ParsedHousingData
-from typing import List
+from typing import List, Optional
 import os
 import json
 import hashlib
