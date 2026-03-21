@@ -12,10 +12,19 @@ class LLMService:
         if not self.api_key or self.api_key == "your_gemini_api_key_here":
             print("Warning: GEMINI_API_KEY is not set properly.")
         
-        # Use gemini-flash-latest base alias to fix 404 error with v1beta
-        self.model = genai.GenerativeModel("gemini-flash-latest")
+        # Models to cycle through if quota is hit
+        self.available_models = ["gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-1.5-flash-8b"]
+        self.current_model_idx = 0
+        self.model = genai.GenerativeModel(self.available_models[self.current_model_idx])
         
         self.mongo_service = MongoService()
+
+    def _switch_model(self):
+        self.current_model_idx = (self.current_model_idx + 1) % len(self.available_models)
+        model_name = self.available_models[self.current_model_idx]
+        print(f"🔄 Switching model to: {model_name}")
+        self.model = genai.GenerativeModel(model_name)
+        return model_name
 
     async def parse_housing_data(self, text: str, api_key: str = None, expected_count: Optional[int] = None, job_id: str = None):
         current_api_key = api_key or self.api_key
@@ -31,9 +40,16 @@ class LLMService:
         async def update_status(count: int, step: str):
             if job_id:
                 try:
+                    current_model = self.available_models[self.current_model_idx]
                     await self.mongo_service.db.job_status.update_one(
                         {"job_id": job_id},
-                        {"$set": {"count": count, "step": step, "total": expected_count, "hash": text_hash}},
+                        {"$set": {
+                            "count": count, 
+                            "step": step, 
+                            "total": expected_count, 
+                            "hash": text_hash,
+                            "model": current_model
+                        }},
                         upsert=True
                     )
                 except:
@@ -140,13 +156,25 @@ class LLMService:
                         break
 
                     except Exception as e:
-                        if "429" in str(e):
+                        error_msg = str(e).lower()
+                        if "429" in error_msg:
+                            # If it's a quota/limit error, try switching models
+                            if "quota" in error_msg or "limit" in error_msg or "exceeded" in error_msg:
+                                new_model = self._switch_model()
+                                print(f"Quota exceeded. Switched to {new_model}")
+                                await update_status(len(all_houses), f"QUOTA_EXCEEDED_SWITCHING_TO_{new_model}")
+                                await asyncio.sleep(5) # Small cooldown
+                                continue
+                            
+                            # General rate limit (RPM)
                             wait_time = 45 + (call_retry * 20)
                             print(f"Rate limited (429). Waiting {wait_time}s...")
+                            await update_status(len(all_houses), f"RATE_LIMITED_WAITING_{wait_time}S")
                             await asyncio.sleep(wait_time)
                             continue
                         else:
                             print(f"Error in Chunk {idx+1}: {e}")
+                            await update_status(len(all_houses), f"ERROR_{idx+1}")
                             break
 
             final_houses = all_houses

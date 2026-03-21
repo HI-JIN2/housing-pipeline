@@ -60,6 +60,7 @@ const App: React.FC = () => {
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [progressCount, setProgressCount] = useState<number>(0);
   const [progressTotal, setProgressTotal] = useState<number>(0);
+  const [activeModel, setActiveModel] = useState<string>('');
 
   useEffect(() => {
     fetchAnnouncements();
@@ -137,6 +138,11 @@ const App: React.FC = () => {
         const res = await axios.get(`/api/status/${jobId}`);
         if (res.data.count > 0) setProgressCount(res.data.count);
         if (res.data.total > 0) setProgressTotal(res.data.total);
+        if (res.data.model) setActiveModel(res.data.model);
+        
+        if (res.data.step && res.data.step.includes('QUOTA')) {
+          setParsingStatus(`할당량 초과로 모델을 ${res.data.model}로 변경하여 분석 중...`);
+        }
       } catch (e) {
         console.error("Status poll error", e);
       }
@@ -710,6 +716,10 @@ const App: React.FC = () => {
             <div className="text-center space-y-4">
               {progressTotal > 0 && (
                 <div className="flex flex-col items-center gap-1 animate-in slide-in-from-bottom-2 duration-500">
+                  <div className="text-[10px] font-bold text-slate-400 mb-0.5 flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100">
+                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                    <span className="uppercase tracking-tighter">{activeModel || 'Gemini'}</span> 사용 중
+                  </div>
                   <div className="flex items-baseline gap-2">
                     <span className="text-4xl font-black text-indigo-600 tracking-tighter">{progressCount}</span>
                     <span className="text-slate-300 font-bold">/</span>

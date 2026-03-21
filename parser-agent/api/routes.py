@@ -106,7 +106,8 @@ async def get_job_status(job_id: str):
         return {
             "count": status.get("count", 0),
             "step": status.get("step", ""),
-            "total": status.get("total", 0)
+            "total": status.get("total", 0),
+            "model": status.get("model", "")
         }
     except Exception as e:
         return {"count": 0, "step": "ERROR", "detail": str(e)}
