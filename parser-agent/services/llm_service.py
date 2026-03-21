@@ -74,7 +74,29 @@ class LLMService:
         self.model = genai.GenerativeModel(self.available_models[0])
         return True
 
-    async def parse_housing_data(self, text: str, api_key: str = None, expected_count: Optional[int] = None, job_id: str = None, provider: str = "gemini", model_name: Optional[str] = None):
+    def _chunk_text(self, text: str, chunk_size: int = 15000) -> List[str]:
+        # Split by page marker if available
+        pages = text.split("--- PAGE ")
+        chunks = []
+        current_chunk = ""
+        
+        for p in pages:
+            if not p: continue
+            page_content = "--- PAGE " + p
+            # If a single page is bigger than chunk_size, we just have to take it (Gemini supports it)
+            if len(current_chunk) + len(page_content) < chunk_size:
+                current_chunk += page_content + "\n"
+            else:
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                current_chunk = page_content + "\n"
+        
+        if current_chunk:
+            chunks.append(current_chunk.strip())
+            
+        return chunks
+
+    async def parse_housing_data(self, text: str, expected_count: Optional[int] = None, job_id: Optional[str] = None, provider: str = "gemini", model_name: Optional[str] = None, api_key: Optional[str] = None):
         text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
         
         # Configure Provider & Model
@@ -133,13 +155,7 @@ class LLMService:
         # --- Optimized Chunking for Rate Limits ---
         # Larger chunks = fewer requests. 
         # Gemini Flash supports 1M context, so 10k-20k is very safe and efficient for parsing.
-        chunk_size = 12000 
-        overlap = 2000
-        chunks = []
-        for i in range(0, len(text), chunk_size - overlap):
-            chunks.append(text[i:i + chunk_size])
-            if i + chunk_size >= len(text):
-                break
+        chunks = self._chunk_text(text)
 
         print(f"Total text length: {len(text)}. Chunked into {len(chunks)} fragments for rate-limit safety.")
         
@@ -164,16 +180,20 @@ class LLMService:
                     retry_hint = f"\n[RETRY HINT] Previous attempt only found {len(final_houses)} items but we expect {expected_count}. BE EVEN MORE EXHAUSTIVE. DO NOT MISS ANY ROWS."
 
                 prompt = f"""
-                [EXTRACTOR MODE: MECHANICAL]
-                You are a data extraction robot. Your purpose is EXHAUSTIVE EXTRACTION.{retry_hint}
+                [EXTRACTOR MODE: MECHANICAL & EXHAUSTIVE]
+                You are a data extraction robot. Your purpose is FULL DATA RECALL.{retry_hint}
                 
-                [CHUNK CONTEXT] Part {idx+1} of {len(chunks)}.
+                [INPUT FORMAT] 
+                The text below contains Markdown tables and layout-preserved text from an official housing announcement PDF.
                 
-                [CRITICAL] Extract EVERY SINGLE housing unit/item mentioned in the [INPUT TEXT].
-                - DO NOT SUMMARIZE.
-                - DO NOT SKIP.
-                - DO NOT GENERALIZE.
-                - Return ONLY a valid JSON object.
+                [CRITICAL INSTRUCTIONS]
+                1. ANALYZE every row in the Markdown tables.
+                2. Extract EVERY SINGLE housing unit/item mentioned.
+                3. DO NOT SUMMARIZE multiple items into one.
+                4. DO NOT SKIP ANY ROWS.
+                5. If a row mentions a "complex name" (단지명) and "house type" (주택형/전용면적), it IS a record.
+                6. Extract "deposit" (임대보증금) and "monthly_rent" (월임대료) as numbers in "만원" units.
+                7. Return ONLY a valid JSON object.
 
                 [JSON SCHEMA]
                 {{
