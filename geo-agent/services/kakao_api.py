@@ -19,17 +19,20 @@ class KakaoGeoClient:
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(self.base_url, headers=headers, params=params)
-                response.raise_for_status()
-                data = response.json()
+                if response.status_code != 200:
+                    print(f"Kakao API Error: Status {response.status_code}, Body: {response.text}")
+                    return (None, None)
                 
-                if data.get("documents"):
-                    doc = data["documents"][0]
-                    # Kakao API returns x as longitude, y as latitude
-                    # y: string format of float
-                    lat = float(doc["y"])
-                    lng = float(doc["x"])
-                    return (lat, lng)
+                data = response.json()
+                if not data.get("documents"):
+                    print(f"Kakao API: No documents found for address '{address}'")
+                    return (None, None)
+                
+                doc = data["documents"][0]
+                lat = float(doc["y"])
+                lng = float(doc["x"])
+                return (lat, lng)
             except Exception as e:
-                print(f"Error calling Kakao Geocoding API: {e}")
+                print(f"Exception during Kakao Geocoding for '{address}': {e}")
                 
         return (None, None)

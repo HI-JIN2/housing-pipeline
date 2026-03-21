@@ -33,7 +33,7 @@ async def enrich_and_save(data: dict):
             # 1. Geocoding
             lat, lng = await kakao_client.get_coordinates(parsed_data.address)
             if not lat or not lng:
-                print(f"Could not geocode address: {parsed_data.address}")
+                print(f"FAILED TO GEOCODE: '{parsed_data.address}' for house '{parsed_data.name}'")
                 return
                 
             # 2. Nearest Station
