@@ -9,16 +9,15 @@
    - 업로드된 문서에서 `pdfplumber`와 `openpyxl`을 활용해 텍스트를 추출합니다.
    - 추출된 텍스트를 **Google Gemini API**를 통해 지정된 JSON 스키마 형태로 파싱합니다.
    - MongoDB 기반 저장소를 활용하여 다중 형식으로 파싱된 결과를 보관하며, 중복 공고의 문서 캐싱을 통해 인프라 비용을 절감합니다.
-   - 구조화된 데이터(호수, 가격, 주소 등)를 Kafka 토픽(`parsed_data`)으로 송신합니다.
+   - 구조화된 데이터(호수, 가격, 주소 등)를 분석 즉시 **Geo Agent**의 HTTP 엔드포인트로 전송합니다.
 
-2. **Geo Agent (`localhost:8001` - Background)**
-   - Kafka 메시지를 실시간으로 구독하여 데이터를 처리합니다.
+2. **Geo Agent (`localhost:8001`)**
+   - Parser Agent로부터 전달받은 주택 데이터를 실시간으로 보강 처리합니다.
    - **카카오 Local API**를 이용해 주소를 지리적 좌표로 변환(Geocoding)합니다.
    - **PostGIS**를 활용하여 가장 가까운 지하철역과 최단 도보 거리를 연산합니다.
    - 위치 정보 캐시를 거쳐 외부 API의 불필요한 호출을 제한합니다.
 
 3. **인프라 (Docker-Compose)**
-   - `Zookeeper` & `Kafka`: 두 Agent 간의 메시지 송수신 매개체
    - `PostGIS`: 지리 정보 보강을 위한 공간(Spatial) 쿼리 데이터베이스
    - `MongoDB`: 가변적인 JSON 구조에 대응하는 문서 저장소 및 LLM 호출 비용 최적화를 위한 캐시 서버
 
@@ -38,9 +37,8 @@ GEMINI_API_KEY="발급받은 키 입력"
 KAKAO_API_KEY="발급받은 REST API 키 입력"
 
 # 설정 기본값
-KAFKA_BOOTSTRAP_SERVERS="localhost:9094"
-POSTGRES_DSN="postgresql://housing_user:housing_password@localhost:5433/housing_db"
-MONGO_URL="mongodb://localhost:27017"
+POSTGRES_DSN="postgresql://housing_user:housing_password@127.0.0.1:5433/housing_db"
+MONGO_URL="mongodb://127.0.0.1:27017"
 ```
 
 ### 2. 통합 실행 스크립트 구동

@@ -10,20 +10,24 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from kafka_module.consumer import start_consumer, stop_consumer
+from services.enrich_service import enrich_and_save, db_service
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Starting Geo Agent...")
-    consumer_task = asyncio.create_task(start_consumer())
+    await db_service.init_pool()
     yield
     print("Shutting down Geo Agent...")
-    await stop_consumer()
-    # Cancel the consumer background task gracefully if needed
-    consumer_task.cancel()
+    await db_service.close_pool()
 
 app = FastAPI(title="Geo Agent (Housing Pipeline)", lifespan=lifespan)
 
 @app.get("/")
 def health_check():
     return {"status": "ok", "service": "geo-agent"}
+
+@app.post("/api/enrich")
+async def enrich_data(data: dict):
+    # This replaces the Kafka consumer logic
+    await enrich_and_save(data)
+    return {"status": "success"}

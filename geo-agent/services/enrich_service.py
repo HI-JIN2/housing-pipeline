@@ -1,55 +1,15 @@
-import json
-import os
-from aiokafka import AIOKafkaConsumer
-
 from services.kakao_api import KakaoGeoClient
 from services.db_service import DBService
 from shared.models import ParsedHousingData, EnrichedHousingData
 
-KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9094")
-
-consumer = None
 db_service = DBService()
 kakao_client = KakaoGeoClient()
 
-async def start_consumer():
-    global consumer
-    await db_service.init_pool()
-    
-    # We delay consumer import/start to let Kafka boot if needed
-    consumer = AIOKafkaConsumer(
-        "parsed_data",
-        bootstrap_servers=KAFKA_BOOTSTRAP_SERVERS,
-        group_id="geo_enricher_group",
-        value_deserializer=lambda m: json.loads(m.decode('utf-8')),
-        auto_offset_reset="earliest"
-    )
-    
-    import asyncio
-    for i in range(15):
-        try:
-            await consumer.start()
-            print(f"Kafka Consumer started successfully on {KAFKA_BOOTSTRAP_SERVERS}")
-            break
-        except Exception as e:
-            print(f"Waiting for Kafka to be ready (Consumer)... ({i+1}/15) - {e}")
-            await asyncio.sleep(3)
-    else:
-        raise RuntimeError(f"Could not connect Kafka Consumer after 15 retries")
-    print("Kafka Consumer started listening to parsed_data")
-    try:
-        async for msg in consumer:
-            print(f"Received message: {msg.value}")
-            await process_message(msg.value)
-    finally:
-        await consumer.stop()
-
-async def stop_consumer():
-    if consumer:
-        await consumer.stop()
-    await db_service.close_pool()
-
-async def process_message(data: dict):
+async def enrich_and_save(data: dict):
+    # Ensure pool is initialized if not already
+    if not db_service.pool:
+        await db_service.init_pool()
+        
     try:
         # validate input
         parsed_data = ParsedHousingData(**data)

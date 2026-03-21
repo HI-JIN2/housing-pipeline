@@ -4,7 +4,7 @@ from typing import Optional
 
 class DBService:
     def __init__(self):
-        self.dsn = os.getenv("POSTGRES_DSN", "postgresql://housing_user:housing_password@localhost:5433/housing_db")
+        self.dsn = os.getenv("POSTGRES_DSN", "postgresql://housing_user:housing_password@127.0.0.1:5433/housing_db")
         self.pool = None
 
     async def init_pool(self):

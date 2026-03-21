@@ -1,5 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from typing import Optional
+import httpx
 from services.pdf_service import PDFService
 from services.excel_service import ExcelService
 from services.llm_service import LLMService
@@ -8,12 +7,11 @@ import uuid
 import sys
 import os
 
-# To access global kafka_producer from main.py without circular import
-from main import kafka_producer
-
 router = APIRouter()
 llm_service = LLMService()
 mongo_service = MongoService()
+
+GEO_AGENT_URL = os.getenv("GEO_AGENT_URL", "http://localhost:8001/api/enrich")
 
 @router.get("/config")
 def get_config():
@@ -75,17 +73,24 @@ async def upload_file(files: list[UploadFile] = File(...), gemini_key: Optional[
         if not housing_data_list:
             return {"status": "warning", "message": "No housing data successfully parsed from the provided files"}
 
-        # 3. Kafka 에 프로듀스
+        # 3. Geo Agent에게 직접 전송 (HTTP POST)
         published_count = 0
-        for data in housing_data_list:
-            # Pydantic dict
-            message = data.model_dump()
-            await kafka_producer.send_message("parsed_data", message)
-            published_count += 1
+        async with httpx.AsyncClient() as client:
+            for data in housing_data_list:
+                message = data.model_dump()
+                try:
+                    # Geo Agent의 신규 엔드포인트로 JSON 전송
+                    response = await client.post(GEO_AGENT_URL, json=message, timeout=10.0)
+                    if response.status_code == 200:
+                        published_count += 1
+                    else:
+                        print(f"Failed to send to Geo Agent: {response.text}")
+                except Exception as e:
+                    print(f"Error calling Geo Agent: {e}")
 
         return {
             "status": "success",
-            "message": f"Successfully parsed and sent {published_count} records to Kafka",
+            "message": f"Successfully parsed and enriched {published_count} records via Geo Agent",
             "data": [d.model_dump() for d in housing_data_list]
         }
 
