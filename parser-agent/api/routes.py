@@ -13,27 +13,35 @@ router = APIRouter()
 llm_service = LLMService()
 
 @router.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
-    filename = file.filename.lower()
-    if not (filename.endswith('.pdf') or filename.endswith('.xlsx')):
-        raise HTTPException(status_code=400, detail="Only PDF and XLSX files are allowed")
+async def upload_file(files: list[UploadFile] = File(...)):
+    if len(files) > 3:
+        raise HTTPException(status_code=400, detail="Maximum 3 files allowed")
 
     try:
-        file_bytes = await file.read()
-        
-        # 1. 텍스트 추출 (확장자별 분기)
-        if filename.endswith('.pdf'):
-            extracted_text = PDFService.extract_text(file_bytes)
-        else:
-            extracted_text = ExcelService.extract_text(file_bytes)
+        housing_data_list = []
+        for file in files:
+            filename = file.filename.lower()
+            if not (filename.endswith('.pdf') or filename.endswith('.xlsx')):
+                continue
+
+            file_bytes = await file.read()
             
-        if not extracted_text.strip():
-            raise HTTPException(status_code=400, detail="Could not extract text from file")
-            
-        # 2. LLM 구조화
-        housing_data_list = await llm_service.parse_housing_data(extracted_text)
+            # 1. 텍스트 추출 (확장자별 분기)
+            if filename.endswith('.pdf'):
+                extracted_text = PDFService.extract_text(file_bytes)
+            else:
+                extracted_text = ExcelService.extract_text(file_bytes)
+                
+            if not extracted_text.strip():
+                continue
+                
+            # 2. LLM 구조화
+            parsed_data = await llm_service.parse_housing_data(extracted_text)
+            if parsed_data:
+                housing_data_list.extend(parsed_data)
+
         if not housing_data_list:
-            return {"status": "warning", "message": "No housing data successfully parsed", "raw_text_preview": extracted_text[:200]}
+            return {"status": "warning", "message": "No housing data successfully parsed from the provided files"}
 
         # 3. Kafka 에 프로듀스
         published_count = 0

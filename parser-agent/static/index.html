@@ -186,8 +186,8 @@
         <div class="dropzone" id="dropzone">
             <span class="drop-icon">📄</span>
             <div class="drop-title">클릭하거나 파일을 위로 끌어다 놓으세요</div>
-            <div class="drop-desc">지원 형식: PDF, XLSX (최대 10MB)</div>
-            <input type="file" id="fileInput" accept=".pdf, .xlsx">
+            <div class="drop-desc">지원 형식: PDF, XLSX (최대 3개, 각 10MB)</div>
+            <input type="file" id="fileInput" accept=".pdf, .xlsx" multiple>
         </div>
 
         <div class="loading" id="loading">
@@ -246,21 +246,31 @@
 
     function handleFiles(files) {
         if (files.length === 0) return;
-        const file = files[0];
-        const validTypes = ['.pdf', '.xlsx'];
-        const extension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
         
-        if (!validTypes.includes(extension)) {
-            showError("PDF 또는 XLSX 파일만 업로드 가능합니다.");
+        if (files.length > 3) {
+            showError("최대 3개의 파일까지만 업로드 가능합니다.");
             return;
         }
 
-        uploadFile(file);
+        const validTypes = ['.pdf', '.xlsx'];
+        const validFiles = [];
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const extension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+            if (!validTypes.includes(extension)) {
+                showError("PDF 또는 XLSX 파일만 업로드 가능합니다.");
+                return;
+            }
+            validFiles.push(file);
+        }
+
+        uploadFiles(validFiles);
     }
 
-    async function uploadFile(file) {
+    async function uploadFiles(files) {
         const formData = new FormData();
-        formData.append('file', file);
+        files.forEach(file => formData.append('files', file));
 
         // Reset UI
         errorMessage.style.display = 'none';
