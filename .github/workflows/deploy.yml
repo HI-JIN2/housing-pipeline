@@ -44,6 +44,11 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/housing-frontend:latest
 
+      - name: Debug Connectivity
+        run: |
+          echo "Testing connectivity to ${{ secrets.OCI_HOST }} on port 22..."
+          nc -zv -w 5 ${{ secrets.OCI_HOST }} 22 || echo "Connectivity failed!"
+
       - name: Copy deploy scripts via SCP
         uses: appleboy/scp-action@master
         with:
