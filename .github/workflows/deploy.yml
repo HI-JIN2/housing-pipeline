@@ -98,12 +98,12 @@ jobs:
               }
             fi
             
-            # Simple pull and up using Docker Compose V2
-            export DOCKER_IMAGE_PARSER=${{ secrets.DOCKERHUB_USERNAME }}/housing-parser:latest
-            export DOCKER_IMAGE_GEO=${{ secrets.DOCKERHUB_USERNAME }}/housing-geo:latest
-            export DOCKER_IMAGE_FRONTEND=${{ secrets.DOCKERHUB_USERNAME }}/housing-frontend:latest
-            export GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+            # Create .env file for Docker Compose to ensure variables are preserved
+            echo "DOCKER_IMAGE_PARSER=${{ secrets.DOCKERHUB_USERNAME }}/housing-parser:latest" > .env
+            echo "DOCKER_IMAGE_GEO=${{ secrets.DOCKERHUB_USERNAME }}/housing-geo:latest" >> .env
+            echo "DOCKER_IMAGE_FRONTEND=${{ secrets.DOCKERHUB_USERNAME }}/housing-frontend:latest" >> .env
+            echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> .env
             
-            # Use sudo -E to preserve environment variables (DOCKER_IMAGE_*)
-            sudo -E docker compose -f deploy/docker-compose.prod.yml pull
-            sudo -E docker compose -f deploy/docker-compose.prod.yml up -d
+            # Use sudo docker compose with --env-file
+            sudo docker compose -f deploy/docker-compose.prod.yml pull
+            sudo docker compose -f deploy/docker-compose.prod.yml up -d --force-recreate
