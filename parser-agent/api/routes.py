@@ -112,11 +112,15 @@ async def upload_file(files: list[UploadFile] = File(...), gemini_key: Optional[
             for data in all_houses:
                 message = data
                 try:
+                    print(f"Calling Geo Agent for {message.get('name')}...")
                     response = await client.post(GEO_AGENT_URL, json=message, timeout=10.0)
                     if response.status_code == 200:
                         published_count += 1
+                        print(f"Successfully called Geo Agent for {message.get('name')}")
+                    else:
+                        print(f"Geo Agent returned {response.status_code}: {response.text}")
                 except Exception as e:
-                    print(f"Error calling Geo Agent: {e}")
+                    print(f"Error calling Geo Agent for {message.get('name')}: {e}")
 
         return {
             "status": "success",
