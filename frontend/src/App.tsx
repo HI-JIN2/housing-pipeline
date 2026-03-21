@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
-  Upload, FileText, ChevronRight, Loader2, AlertCircle, Home, 
+  FileText, Loader2, AlertCircle, Home, 
   MapPin, BadgeCent, Layers, ChevronLeft, Search, Menu, X, Plus, Library
 } from 'lucide-react';
 import MapView from './components/KakaoMapView';
@@ -53,7 +53,7 @@ const App: React.FC = () => {
   const fetchAnnouncements = async () => {
     try {
       const res = await axios.get('/api/announcements');
-      setAnnouncements(res.data);
+      setAnnouncements(res.data.data);
     } catch (err) {
       console.error('Failed to fetch:', err);
     }
