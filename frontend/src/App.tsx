@@ -48,12 +48,13 @@ const App: React.FC = () => {
   const [expandedHouseId, setExpandedHouseId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
-  const [hasServerKey, setHasServerKey] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [previewData, setPreviewData] = useState<{title: string, desc: string, houses: House[]} | null>(null);
+  const [hasServerKey, setHasServerKey] = useState(false); // Added this state based on checkConfig content
+  const [pendingFiles, setPendingFiles] = useState<FileList | null>(null); // Added this state based on handleFileChange content
+  const [isConfirmingUpload, setIsConfirmingUpload] = useState(false); // Added this state based on handleFileChange content
+  const [expectedCount, setExpectedCount] = useState(''); // Added this state based on handleFileChange content
   const [userApiKey, setUserApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
-  const [isConfirmingUpload, setIsConfirmingUpload] = useState(false);
-  const [expectedCount, setExpectedCount] = useState<number | string>('');
-  const [pendingFiles, setPendingFiles] = useState<FileList | null>(null);
-  const [isCoffeeOpen, setIsCoffeeOpen] = useState(false);
 
   useEffect(() => {
     fetchAnnouncements();
@@ -91,6 +92,21 @@ const App: React.FC = () => {
     }
   };
 
+  const deleteAnnouncement = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!window.confirm('정말 이 공고와 관련된 모든 데이터를 삭제하시겠습니까?')) return;
+    try {
+      await axios.delete(`/api/announcements/${id}`);
+      await fetchAnnouncements();
+      if (selectedId === id) {
+        setSelectedId(null);
+        setDetail(null);
+      }
+    } catch (err) {
+      setError('삭제 현장에 실패했습니다.');
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return;
     setPendingFiles(e.target.files);
@@ -107,25 +123,44 @@ const App: React.FC = () => {
     Array.from(pendingFiles).forEach(file => {
       formData.append('files', file);
     });
-    if (expectedCount) {
-      formData.append('expected_count', expectedCount.toString());
-    }
+    if (expectedCount) formData.append('expected_count', expectedCount.toString());
     if (userApiKey) {
       formData.append('gemini_key', userApiKey);
       localStorage.setItem('gemini_api_key', userApiKey);
     }
     
     try {
-      await axios.post('/api/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      const res = await axios.post('/api/upload', formData);
+      setPreviewData({
+        title: res.data.announcement_title,
+        desc: res.data.announcement_description,
+        houses: res.data.houses
       });
-      await fetchAnnouncements();
-      setIsDrawerOpen(true);
+      setIsDrawerOpen(false);
     } catch (err) {
-      setError('업로드 중 오류가 발생했습니다.');
+      setError('분석 중 오류가 발생했습니다.');
     } finally {
       setUploading(false);
       setPendingFiles(null);
+    }
+  };
+
+  const onFinalSave = async () => {
+    if (!previewData) return;
+    setUploading(true);
+    try {
+      await axios.post('/api/save', {
+        announcement_title: previewData.title,
+        announcement_description: previewData.desc,
+        houses: previewData.houses
+      });
+      setPreviewData(null);
+      await fetchAnnouncements();
+      setError(null);
+    } catch (err) {
+      setError('저장 중 오류가 발생했습니다.');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -137,7 +172,7 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#f8fafc] font-sans text-slate-900">
       
-      {/* 1. Nav Rail (Far Left) */}
+      {/* 1. Nav Rail */}
       <nav className="w-16 lg:w-20 bg-slate-900 flex flex-col items-center py-6 gap-8 z-50 border-r border-slate-800 shrink-0">
         <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
           <Home className="w-6 h-6 text-white" />
@@ -145,7 +180,7 @@ const App: React.FC = () => {
         
         <div className="flex flex-col gap-4">
           <button 
-            onClick={() => setIsDrawerOpen(true)}
+            onClick={() => { setIsDrawerOpen(true); setPreviewData(null); }}
             className={cn(
               "p-3 rounded-2xl transition-all relative group shadow-sm",
               isDrawerOpen ? "bg-white text-slate-900" : "text-slate-400 hover:text-white hover:bg-slate-800"
@@ -153,7 +188,17 @@ const App: React.FC = () => {
             title="공고 목록"
           >
             <Library className="w-6 h-6" />
-            <div className="absolute left-full ml-3 px-2 py-1 bg-slate-800 text-white text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">공고 목록</div>
+          </button>
+
+          <button 
+            onClick={() => setIsAdmin(!isAdmin)}
+            className={cn(
+              "p-3 rounded-2xl transition-all relative group shadow-sm",
+              isAdmin ? "bg-amber-400 text-slate-900" : "text-slate-400 hover:text-white hover:bg-slate-800"
+            )}
+            title={isAdmin ? "관리자 모드 (ON)" : "관리자 모드 (OFF)"}
+          >
+            <Layers className="w-6 h-6" />
           </button>
         </div>
       </nav>
@@ -313,46 +358,141 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* --- Overlay Drawer for Announcements --- */}
+      {/* --- Preview & Edit Overlay (Admin only) --- */}
+      {previewData && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4 lg:p-12 animate-in fade-in zoom-in-95">
+          <div className="bg-white w-full max-w-6xl h-full rounded-[3rem] shadow-2xl flex flex-col overflow-hidden">
+            <div className="p-8 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div>
+                <h2 className="text-2xl font-black text-slate-800 tracking-tight">Data Preview & Edit</h2>
+                <p className="text-sm text-slate-400 mt-1">저장하기 전에 데이터를 확인하고 수정하세요. ({previewData.houses.length}건)</p>
+              </div>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setPreviewData(null)}
+                  className="px-6 py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200"
+                >
+                  취소
+                </button>
+                <button 
+                  onClick={onFinalSave}
+                  disabled={uploading}
+                  className="px-8 py-3 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 shadow-lg flex items-center gap-2"
+                >
+                  {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
+                  최종 저장 및 지도로 보내기
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto p-8 pt-0">
+              <table className="w-full text-left border-separate border-spacing-y-2">
+                <thead className="sticky top-0 bg-white z-10 px-4">
+                  <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    <th className="pb-4 pl-4">Name</th>
+                    <th className="pb-4">Address</th>
+                    <th className="pb-4">Type</th>
+                    <th className="pb-4">Deposit (만)</th>
+                    <th className="pb-4">Rent (만)</th>
+                  </tr>
+                </thead>
+                <tbody className="space-y-4">
+                  {previewData.houses.map((h, i) => (
+                    <tr key={i} className="bg-slate-50 hover:bg-indigo-50 transition-colors group">
+                      <td className="p-4 py-3 rounded-l-2xl">
+                        <input 
+                          className="bg-transparent border-none font-bold text-slate-800 focus:ring-1 focus:ring-indigo-300 rounded px-2 w-full outline-none"
+                          value={h.name}
+                          onChange={(e) => {
+                            const newHouses = [...previewData.houses];
+                            newHouses[i].name = e.target.value;
+                            setPreviewData({...previewData, houses: newHouses});
+                          }}
+                        />
+                      </td>
+                      <td className="p-4 py-3">
+                        <input 
+                          className="bg-transparent border-none text-xs text-slate-500 focus:ring-1 focus:ring-indigo-300 rounded px-2 w-full outline-none"
+                          value={h.address}
+                          onChange={(e) => {
+                            const newHouses = [...previewData.houses];
+                            newHouses[i].address = e.target.value;
+                            setPreviewData({...previewData, houses: newHouses});
+                          }}
+                        />
+                      </td>
+                      <td className="p-4 py-3">
+                        <input 
+                          className="bg-transparent border-none text-[10px] font-black text-slate-400 focus:ring-1 focus:ring-indigo-300 rounded px-2 w-full outline-none"
+                          value={h.house_type}
+                          onChange={(e) => {
+                            const newHouses = [...previewData.houses];
+                            newHouses[i].house_type = e.target.value;
+                            setPreviewData({...previewData, houses: newHouses});
+                          }}
+                        />
+                      </td>
+                      <td className="p-4 py-3 text-sm font-bold text-indigo-600">
+                        <input 
+                          type="number"
+                          className="bg-transparent border-none text-sm font-bold text-indigo-600 focus:ring-1 focus:ring-indigo-300 rounded px-2 w-16 outline-none"
+                          value={h.deposit}
+                          onChange={(e) => {
+                            const newHouses = [...previewData.houses];
+                            newHouses[i].deposit = parseInt(e.target.value) || 0;
+                            setPreviewData({...previewData, houses: newHouses});
+                          }}
+                        />
+                      </td>
+                      <td className="p-4 py-3 rounded-r-2xl">
+                        <input 
+                          type="number"
+                          className="bg-transparent border-none text-sm font-bold text-slate-700 focus:ring-1 focus:ring-indigo-300 rounded px-2 w-16 outline-none"
+                          value={h.monthly_rent}
+                          onChange={(e) => {
+                            const newHouses = [...previewData.houses];
+                            newHouses[i].monthly_rent = parseInt(e.target.value) || 0;
+                            setPreviewData({...previewData, houses: newHouses});
+                          }}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- Library Drawer Overhaul --- */}
       {isDrawerOpen && (
         <>
-          <div 
-            className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300"
-            onClick={() => setIsDrawerOpen(false)}
-          />
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300" onClick={() => setIsDrawerOpen(false)} />
           <div className="fixed top-0 bottom-0 left-16 lg:left-20 w-[400px] bg-white shadow-2xl z-50 animate-in slide-in-from-left duration-500 border-r border-slate-100 flex flex-col rounded-r-3xl overflow-hidden">
             <div className="p-8 border-b border-slate-100 flex items-center justify-between shrink-0">
               <div>
                 <h2 className="text-2xl font-black text-slate-800 tracking-tight">Library</h2>
                 <p className="text-sm text-slate-400 mt-1 font-medium italic">분석된 공고 내역입니다.</p>
               </div>
-              <button 
-                onClick={() => setIsDrawerOpen(false)}
-                className="p-3 hover:bg-slate-100 rounded-2xl transition-colors"
-              >
+              <button onClick={() => setIsDrawerOpen(false)} className="p-3 hover:bg-slate-100 rounded-2xl transition-colors">
                 <X className="w-6 h-6 text-slate-400" />
               </button>
             </div>
             
             <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-              {/* Add New Announcement Card */}
-              <label className={cn(
-                "p-6 rounded-[2.5rem] border-2 border-dashed transition-all cursor-pointer group flex flex-col items-center justify-center gap-2",
-                uploading 
-                  ? "bg-indigo-50 border-indigo-200 cursor-not-allowed" 
-                  : "bg-slate-50 border-slate-200 hover:bg-white hover:border-indigo-400 hover:shadow-xl"
-              )}>
-                {uploading ? (
-                  <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-                ) : (
-                  <Plus className="w-8 h-8 text-slate-400 group-hover:text-indigo-600" />
-                )}
-                <div className="text-center">
-                  <span className="block text-sm font-black text-slate-800">찾는 공고가 없나요?</span>
-                  <span className="block text-xs font-bold text-slate-400 group-hover:text-indigo-500">새로운 공고 추가하기</span>
-                </div>
-                <input type="file" multiple className="hidden" onChange={handleFileChange} disabled={uploading} />
-              </label>
+              {isAdmin && (
+                <label className={cn(
+                  "p-6 rounded-[2.5rem] border-2 border-dashed transition-all cursor-pointer group flex flex-col items-center justify-center gap-2",
+                  uploading ? "bg-indigo-50 border-indigo-200 cursor-not-allowed" : "bg-slate-50 border-slate-200 hover:bg-white hover:border-indigo-400 hover:shadow-xl"
+                )}>
+                  {uploading ? <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" /> : <Plus className="w-8 h-8 text-slate-400 group-hover:text-indigo-600" />}
+                  <div className="text-center">
+                    <span className="block text-sm font-black text-slate-800">새로운 공고 추가하기</span>
+                  </div>
+                  <input type="file" multiple className="hidden" onChange={handleFileChange} disabled={uploading} />
+                </label>
+              )}
 
               {announcements.map((a) => (
                 <div 
@@ -360,23 +500,24 @@ const App: React.FC = () => {
                   onClick={() => loadDetail(a.id)}
                   className={cn(
                     "p-6 rounded-[2.5rem] border transition-all cursor-pointer group relative overflow-hidden",
-                    selectedId === a.id 
-                      ? "bg-indigo-50 border-indigo-200"
-                      : "bg-white border-slate-100 hover:border-indigo-100 hover:shadow-2xl hover:-translate-y-1"
+                    selectedId === a.id ? "bg-indigo-50 border-indigo-200" : "bg-white border-slate-100 hover:border-indigo-100 hover:shadow-2xl hover:-translate-y-1"
                   )}
                 >
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex justify-between items-start">
                     <span className="px-2 py-0.5 bg-indigo-600 text-white rounded-full text-[8px] font-black uppercase tracking-widest">
                       {a.house_count || 0} UNITS
                     </span>
+                    {isAdmin && (
+                      <button 
+                        onClick={(e) => deleteAnnouncement(e, a.id)}
+                        className="p-1 text-slate-300 hover:text-red-500 transition-colors"
+                      >
+                       <X className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
-                  <h3 className={cn(
-                    "text-lg font-black text-slate-800 leading-tight mb-2 group-hover:text-indigo-600 transition-colors",
-                    selectedId === a.id && "text-indigo-700"
-                  )}>{a.title}</h3>
-                  <div className="flex items-center gap-2 text-slate-400 text-[10px] font-bold uppercase tracking-tight">
-                    <FileText className="w-3.5 h-3.5" /> {a.filename}
-                  </div>
+                  <h3 className={cn("text-lg font-black text-slate-800 leading-tight my-2 group-hover:text-indigo-600", selectedId === a.id && "text-indigo-700")}>{a.title}</h3>
+                  <div className="flex items-center gap-2 text-slate-400 text-[10px] font-bold uppercase truncate"><FileText className="w-3.5 h-3.5" /> {a.filename}</div>
                 </div>
               ))}
             </div>
@@ -394,46 +535,23 @@ const App: React.FC = () => {
                 <FileText className="w-8 h-8" />
               </div>
               <h2 className="text-2xl font-black text-slate-800 tracking-tight">분석 시작하기</h2>
-              <p className="text-sm text-slate-400 mt-2 font-medium">선택하신 {pendingFiles?.length}개의 파일을 분석합니다.<br/>공고에 포함된 총 주택 개수를 입력해주세요.</p>
+              <p className="text-sm text-slate-400 mt-2 font-medium">선택하신 {pendingFiles?.length}개의 파일을 분석합니다.</p>
             </div>
             
             <div className="space-y-4">
               {!hasServerKey && (
                 <div>
                   <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Gemini API Key (필수)</label>
-                  <input 
-                    type="password" 
-                    placeholder="AI 서버에 키가 설정되어 있지 않습니다. 입력해주세요."
-                    className="w-full px-5 py-3 bg-red-50/50 border border-red-100 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-red-500 outline-none transition-all placeholder:text-red-300"
-                    value={userApiKey}
-                    onChange={(e) => setUserApiKey(e.target.value)}
-                  />
+                  <input type="password" placeholder="Key..." className="w-full px-5 py-3 bg-red-50/50 border border-red-100 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-red-500 outline-none transition-all" value={userApiKey} onChange={(e) => setUserApiKey(e.target.value)} />
                 </div>
               )}
               <div>
                 <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-1">예상 주택 개수 (선택)</label>
-                <input 
-                  type="number" 
-                  placeholder="예: 261"
-                  className="w-full px-5 py-3 bg-slate-100 border-none rounded-2xl text-lg font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                  value={expectedCount}
-                  onChange={(e) => setExpectedCount(e.target.value)}
-                  autoFocus
-                />
+                <input type="number" placeholder="예: 261" className="w-full px-5 py-3 bg-slate-100 border-none rounded-2xl text-lg font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all" value={expectedCount} onChange={(e) => setExpectedCount(e.target.value)} />
               </div>
               <div className="flex gap-3 pt-2">
-                <button 
-                  onClick={() => setIsConfirmingUpload(false)}
-                  className="flex-1 px-5 py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-all"
-                >
-                  취소
-                </button>
-                <button 
-                  onClick={onFileUpload}
-                  className="flex-1 px-5 py-3 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all"
-                >
-                  분석 시작
-                </button>
+                <button onClick={() => setIsConfirmingUpload(false)} className="flex-1 px-5 py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl">취소</button>
+                <button onClick={onFileUpload} className="flex-1 px-5 py-3 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 shadow-lg">분석 시작</button>
               </div>
             </div>
           </div>
