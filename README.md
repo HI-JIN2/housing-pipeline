@@ -1,6 +1,6 @@
-# 공고zip: AI 기반 부동산 공고 분석 자동화 시스템
+# 공고zip: AI 기반 주택청약 공고 분석 자동화 시스템
 
-부동산 및 청약 공고문(PDF, XLSX)에서 핵심 정보를 AI(Gemini)로 자동 추출하고, 위치 정보 보강 및 지하철역 도보 거리를 연산하는 지능형 데이터 파이프라인입니다.
+SH, LH 주택 청약 공고문(PDF, XLSX)에서 핵심 정보를 AI(Gemini)로 자동 추출하고, 위치 정보 보강 및 지하철역 도보 거리를 연산하는 지능형 데이터 파이프라인입니다.
 
 English version is available at [README_EN.md](./README_EN.md).
 
