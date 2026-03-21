@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Upload, FileText, ChevronRight, Loader2, AlertCircle, Home, MapPin, BadgeCent, Map as MapIcon, Layers } from 'lucide-react';
-import MapView from './components/MapView';
+import MapView from './components/KakaoMapView';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -300,12 +300,12 @@ const App: React.FC = () => {
         href="https://qr.kakaopay.com/Ej88F1kMG" 
         target="_blank" 
         rel="noreferrer"
-        className="fixed bottom-8 right-8 group hover:-translate-y-1 transition-transform z-50"
+        className="fixed bottom-8 right-8 group hover:-translate-y-1 transition-transform z-50 flex"
       >
         <img 
           src="http://localhost:8000/static/images/btn_send_regular.png" 
           alt="카카오페이" 
-          className="h-12 shadow-lg rounded-xl"
+          className="h-12 shadow-lg rounded-xl block m-0 p-0"
           onError={(e) => (e.currentTarget.style.display = 'none')}
         />
       </a>
