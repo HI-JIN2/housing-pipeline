@@ -1,4 +1,4 @@
-ㄹimport google.generativeai as genai
+import google.generativeai as genai
 from shared.models import ParsedHousingData
 from typing import List
 import os
