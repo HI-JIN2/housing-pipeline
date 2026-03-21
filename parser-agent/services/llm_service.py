@@ -76,13 +76,46 @@ class LLMService:
         self.active_gemini_model = self.available_models[0]
         return True
 
-    def _chunk_text(self, text: str, chunk_size: int = 12000, overlap: int = 2000) -> List[str]:
-        # Simple character-based chunking with overlap for robustness
+    def _chunk_text(self, text: str, max_chunk_size: int = 30000) -> List[str]:
+        """
+        Group pages into chunks until max_chunk_size is reached.
+        This preserves page-level context and avoids cutting rows/tables in half.
+        """
+        import re
+        # Split by page marker: --- PAGE N ---
+        pages = re.split(r'(?=--- PAGE \d+ ---)', text)
         chunks = []
-        for i in range(0, len(text), chunk_size - overlap):
-            chunks.append(text[i:i + chunk_size])
-            if i + chunk_size >= len(text):
-                break
+        current_chunk = []
+        current_size = 0
+        
+        for page in pages:
+            if not page.strip(): continue
+            
+            page_size = len(page)
+            # If a single page is bigger than max_chunk_size, we have to split it (rare but possible)
+            if page_size > max_chunk_size:
+                if current_chunk:
+                    chunks.append("".join(current_chunk))
+                    current_chunk = []
+                    current_size = 0
+                
+                # Split huge page by character (fallback)
+                for i in range(0, page_size, max_chunk_size):
+                    chunks.append(page[i:i + max_chunk_size])
+                continue
+
+            if current_size + page_size > max_chunk_size:
+                chunks.append("".join(current_chunk))
+                current_chunk = [page]
+                current_size = page_size
+            else:
+                current_chunk.append(page)
+                current_size += page_size
+        
+        if current_chunk:
+            chunks.append("".join(current_chunk))
+            
+        print(f"📦 Context-Aware Chunking: Split {len(pages)} pages into {len(chunks)} chunks.")
         return chunks
 
     async def parse_housing_data(self, text: str, expected_count: Optional[int] = None, job_id: Optional[str] = None, provider: str = "gemini", model_name: Optional[str] = None, api_key: Optional[str] = None):
