@@ -3,7 +3,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 # Update system and install essential packages
 apt-get update -y
-apt-get install -y docker.io docker-compose git curl iptables-persistent
+apt-get install -y docker.io docker-compose-plugin git curl iptables-persistent
 
 # Start docker service and grant permissions to ubuntu user
 systemctl enable docker
