@@ -48,6 +48,8 @@ const App: React.FC = () => {
   const [expandedHouseId, setExpandedHouseId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
+  const [hasServerKey, setHasServerKey] = useState(false);
+  const [userApiKey, setUserApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
   const [isConfirmingUpload, setIsConfirmingUpload] = useState(false);
   const [expectedCount, setExpectedCount] = useState<number | string>('');
   const [pendingFiles, setPendingFiles] = useState<FileList | null>(null);
@@ -55,7 +57,17 @@ const App: React.FC = () => {
 
   useEffect(() => {
     fetchAnnouncements();
+    checkConfig();
   }, []);
+
+  const checkConfig = async () => {
+    try {
+      const res = await axios.get('/api/config');
+      setHasServerKey(res.data.has_gemini_key);
+    } catch (err) {
+      console.error('Failed to check config:', err);
+    }
+  };
 
   const fetchAnnouncements = async () => {
     try {
@@ -97,6 +109,10 @@ const App: React.FC = () => {
     });
     if (expectedCount) {
       formData.append('expected_count', expectedCount.toString());
+    }
+    if (userApiKey) {
+      formData.append('gemini_key', userApiKey);
+      localStorage.setItem('gemini_api_key', userApiKey);
     }
     
     try {
@@ -382,6 +398,18 @@ const App: React.FC = () => {
             </div>
             
             <div className="space-y-4">
+              {!hasServerKey && (
+                <div>
+                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Gemini API Key (필수)</label>
+                  <input 
+                    type="password" 
+                    placeholder="AI 서버에 키가 설정되어 있지 않습니다. 입력해주세요."
+                    className="w-full px-5 py-3 bg-red-50/50 border border-red-100 rounded-2xl text-sm font-bold focus:ring-2 focus:ring-red-500 outline-none transition-all placeholder:text-red-300"
+                    value={userApiKey}
+                    onChange={(e) => setUserApiKey(e.target.value)}
+                  />
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-1">예상 주택 개수 (선택)</label>
                 <input 
