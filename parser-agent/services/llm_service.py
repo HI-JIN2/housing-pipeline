@@ -1,4 +1,5 @@
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from openai import OpenAI
 from shared.models import ParsedHousingData
 from typing import List, Optional
@@ -36,8 +37,8 @@ class LLMService:
         
         # Initial Gemini config
         if self.api_keys:
-            genai.configure(api_key=self.api_keys[self.current_key_idx])
-            self.model = genai.GenerativeModel(self.available_models[self.current_model_idx])
+            self.gemini_client = genai.Client(api_key=self.api_keys[self.current_key_idx])
+            self.active_gemini_model = self.available_models[self.current_model_idx]
             
         # OpenAI Config
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -58,7 +59,7 @@ class LLMService:
             
         model_name = self.available_models[self.current_model_idx]
         print(f"🔄 Switching model to: {model_name}")
-        self.model = genai.GenerativeModel(model_name)
+        self.active_gemini_model = model_name
         return model_name
 
     def _switch_key(self):
@@ -69,9 +70,10 @@ class LLMService:
         self.current_key_idx = (self.current_key_idx + 1) % len(self.api_keys)
         new_key = self.api_keys[self.current_key_idx]
         print(f"🔑 Switching API Key to index {self.current_key_idx} (Ends in ...{new_key[-4:]})")
-        genai.configure(api_key=new_key)
+        
+        self.gemini_client = genai.Client(api_key=new_key)
         self.current_model_idx = 0
-        self.model = genai.GenerativeModel(self.available_models[0])
+        self.active_gemini_model = self.available_models[0]
         return True
 
     def _chunk_text(self, text: str, chunk_size: int = 15000) -> List[str]:
@@ -110,13 +112,16 @@ class LLMService:
                 await update_status(0, "ERROR_OPENAI_NOT_CONFIGURED")
                 return {"error": "OpenAI client not configured. Check OPENAI_API_KEY in .env"}
         else:
-            client = genai
-            active_model = model_name or self.available_models[self.current_model_idx]
+            # Gemini Initialization (using new SDK Client)
+            active_model = model_name or self.active_gemini_model
             if api_key:
-                genai.configure(api_key=api_key)
-            elif self.api_keys:
-                genai.configure(api_key=self.api_keys[self.current_key_idx])
-            self.model = genai.GenerativeModel(active_model)
+                # Use per-request key
+                gemini_client = genai.Client(api_key=api_key)
+            else:
+                gemini_client = self.gemini_client
+            
+            # The actual call will use gemini_client.aio.models.generate_content
+            # We don't need to create a model object anymore.
 
         # Helper to update progress
         async def update_status(count: int, step: str, error: str = None):
@@ -233,9 +238,10 @@ class LLMService:
                             response_text = response.choices[0].message.content
                         else:
                             # Gemini Parsing
-                            response = await self.model.generate_content_async(
+                            response = await gemini_client.aio.models.generate_content(
+                                model=active_model,
                                 contents=prompt,
-                                generation_config=genai.GenerationConfig(
+                                config=types.GenerateContentConfig(
                                     response_mime_type="application/json",
                                     temperature=0.2 if retry_count > 0 else 0.0
                                 )
