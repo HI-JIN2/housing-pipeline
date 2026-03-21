@@ -12,12 +12,23 @@ fi
 
 # Update system and install essential packages
 apt-get update -y
-apt-get install -y docker.io docker-compose-plugin git curl iptables-persistent
+apt-get install -y git curl iptables-persistent
 
-# Start docker service and grant permissions to ubuntu user
+# Install Docker using the official script
+curl -fsSL https://get.docker.com | sh
+usermod -aG docker ubuntu
+
+# Install Docker Compose V2 plugin
+apt-get update
+apt-get install -y docker-compose-plugin || {
+  mkdir -p /usr/local/lib/docker/cli-plugins
+  curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m) -o /usr/local/lib/docker/cli-plugins/docker-compose
+  chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+}
+
+# Start docker service
 systemctl enable docker
 systemctl start docker
-usermod -aG docker ubuntu
 
 # Open Ubuntu iptables for 공고zip (Ports 80, 8000, 5173)
 iptables -I INPUT -p tcp -m tcp --dport 80 -j ACCEPT

@@ -82,10 +82,20 @@ jobs:
             sudo iptables -I INPUT -p tcp --dport 8000 -j ACCEPT || true
             sudo iptables -I INPUT -p tcp --dport 5173 -j ACCEPT || true
             
-            # Ensure Docker Compose V2 is installed to fix 'ContainerConfig' error
+            # Ensure Docker and Docker Compose V2 are installed
+            if ! command -v docker > /dev/null 2>&1; then
+              curl -fsSL https://get.docker.com | sudo sh
+              sudo usermod -aG docker ubuntu
+            fi
+            
             if ! docker compose version > /dev/null 2>&1; then
               sudo apt-get update
-              sudo apt-get install -y docker-compose-plugin
+              sudo apt-get install -y docker-compose-plugin || {
+                DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}
+                mkdir -p $DOCKER_CONFIG/cli-plugins
+                curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m) -o $DOCKER_CONFIG/cli-plugins/docker-compose
+                chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
+              }
             fi
             
             # Simple pull and up using Docker Compose V2
@@ -94,5 +104,6 @@ jobs:
             export DOCKER_IMAGE_FRONTEND=${{ secrets.DOCKERHUB_USERNAME }}/housing-frontend:latest
             export GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
             
-            docker compose -f deploy/docker-compose.prod.yml pull
-            docker compose -f deploy/docker-compose.prod.yml up -d
+            # Use sudo for docker commands to ensure permission during the first run
+            sudo docker compose -f deploy/docker-compose.prod.yml pull
+            sudo docker compose -f deploy/docker-compose.prod.yml up -d
