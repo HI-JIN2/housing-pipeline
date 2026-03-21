@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
   FileText, Loader2, AlertCircle, Home, 
-  MapPin, BadgeCent, Layers, ChevronLeft, Search, Menu, X, Plus, Library
+  MapPin, BadgeCent, Layers, ChevronLeft, Search, Menu, X, Plus, Library, ChevronRight
 } from 'lucide-react';
 import MapView from './components/KakaoMapView';
 import { clsx, type ClassValue } from 'clsx';
@@ -20,6 +20,7 @@ interface House {
   deposit: number;
   monthly_rent: number;
   raw_text_reference: string;
+  extra_info?: Record<string, any>;
   lat?: number;
   lng?: number;
   nearest_station?: string;
@@ -44,7 +45,9 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedHouseId, setSelectedHouseId] = useState<string | null>(null);
+  const [expandedHouseId, setExpandedHouseId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  
   const [isConfirmingUpload, setIsConfirmingUpload] = useState(false);
   const [expectedCount, setExpectedCount] = useState<number | string>('');
   const [pendingFiles, setPendingFiles] = useState<FileList | null>(null);
@@ -66,6 +69,7 @@ const App: React.FC = () => {
   const loadDetail = async (id: string) => {
     setSelectedId(id);
     setSelectedHouseId(null);
+    setExpandedHouseId(null);
     setIsDrawerOpen(false);
     try {
       const res = await axios.get(`/api/announcements/${id}`);
@@ -187,7 +191,7 @@ const App: React.FC = () => {
           {!detail ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-300 px-8 text-center">
               <Library className="w-12 h-12 mb-4 opacity-20" />
-              <p className="text-sm font-bold opacity-60">왼쪽 메뉴에서 공고를 선택하거나<br/>파일을 올려주세요.</p>
+              <p className="text-sm font-bold opacity-60">왼쪽 메뉴에서 공고를 선택하거나<br/>새로운 공고를 추가해주세요.</p>
             </div>
           ) : (
             filteredHouses.map((house) => (
@@ -212,10 +216,10 @@ const App: React.FC = () => {
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
                     <MapPin className="w-3.5 h-3.5 text-slate-300 mt-0.5 shrink-0" />
-                    <div>
-                      <p className="text-xs text-slate-500 leading-snug">{house.address}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-slate-500 leading-snug break-all">{house.address}</p>
                       {house.nearest_station && (
-                        <div className="flex items-center gap-1.5 mt-1.5">
+                        <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                           <span className="text-[9px] font-black px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded flex items-center gap-0.5">
                             <Layers className="w-2.5 h-2.5" /> {house.nearest_station}역
                           </span>
@@ -224,12 +228,39 @@ const App: React.FC = () => {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 pt-1 border-t border-slate-50">
-                    <BadgeCent className="w-3.5 h-3.5 text-slate-300 shrink-0" />
-                    <p className="text-xs font-black text-indigo-600">
-                      보증금 {house.deposit.toLocaleString()} / 월 {house.monthly_rent.toLocaleString()} <span className="text-[9px] text-slate-400 font-normal ml-0.5">(만원)</span>
-                    </p>
+                  
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-50">
+                    <div className="flex items-center gap-2">
+                      <BadgeCent className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                      <p className="text-xs font-black text-indigo-600">
+                        보증금 {house.deposit.toLocaleString()} / 월 {house.monthly_rent.toLocaleString()} <span className="text-[9px] text-slate-400 font-normal ml-0.5">(만원)</span>
+                      </p>
+                    </div>
+                    {house.extra_info && Object.keys(house.extra_info).length > 0 && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedHouseId(expandedHouseId === house.id ? null : house.id);
+                        }}
+                        className="text-[10px] font-bold text-slate-400 hover:text-indigo-600 flex items-center gap-0.5 transition-colors"
+                      >
+                        {expandedHouseId === house.id ? '접기' : '더보기'}
+                        <ChevronRight className={cn("w-3 h-3 transition-transform", expandedHouseId === house.id && "rotate-90")} />
+                      </button>
+                    )}
                   </div>
+
+                  {/* Expandable Extra Info Section */}
+                  {expandedHouseId === house.id && house.extra_info && (
+                    <div className="mt-3 grid grid-cols-2 gap-2 p-3 bg-white/50 rounded-2xl border border-indigo-50 animate-in slide-in-from-top-2">
+                      {Object.entries(house.extra_info).map(([key, value]) => (
+                        <div key={key} className="flex flex-col gap-0.5">
+                          <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">{key}</span>
+                          <span className="text-[10px] font-bold text-slate-700 truncate">{String(value) || '-'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             ))
@@ -273,8 +304,8 @@ const App: React.FC = () => {
             className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-40 animate-in fade-in duration-300"
             onClick={() => setIsDrawerOpen(false)}
           />
-          <div className="fixed top-0 bottom-0 left-20 w-[400px] bg-white shadow-2xl z-50 animate-in slide-in-from-left duration-500 border-r border-slate-100 flex flex-col rounded-r-3xl">
-            <div className="p-8 border-b border-slate-100 flex items-center justify-between">
+          <div className="fixed top-0 bottom-0 left-16 lg:left-20 w-[400px] bg-white shadow-2xl z-50 animate-in slide-in-from-left duration-500 border-r border-slate-100 flex flex-col rounded-r-3xl overflow-hidden">
+            <div className="p-8 border-b border-slate-100 flex items-center justify-between shrink-0">
               <div>
                 <h2 className="text-2xl font-black text-slate-800 tracking-tight">Library</h2>
                 <p className="text-sm text-slate-400 mt-1 font-medium italic">분석된 공고 내역입니다.</p>
@@ -320,7 +351,7 @@ const App: React.FC = () => {
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <span className="px-2 py-0.5 bg-indigo-600 text-white rounded-full text-[8px] font-black uppercase tracking-widest">
-                      {a.house_count} UNITS
+                      {a.house_count || 0} UNITS
                     </span>
                   </div>
                   <h3 className={cn(

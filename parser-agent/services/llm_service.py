@@ -59,12 +59,13 @@ class LLMService:
         [JSON SCHEMA]
         Extract each item into the following format:
         - id: Unique ID (announcement name + index)
-        - name: Apartment/Housing name (e.g., 'OO Apartment', 'Happy House')
+        - name: Apartment/Housing name
         - address: Full detailed address
-        - house_type: Housing type/size (e.g., '39A', 'Exclusive 59m2')
+        - house_type: Housing type/size
         - deposit: Security deposit (Integer, unit: 10,000 KRW)
         - monthly_rent: Monthly rent (Integer, unit: 10,000 KRW, 0 if not applicable)
-        - raw_text_reference: A snippet of the original text from which this data was derived.
+        - raw_text_reference: A snippet of original text
+        - extra_info: A dictionary containing ALL other discovered columns (e.g., "방개수", "저층여부", "전용면적", "승강기설치여부", "주차대수", "전용면적", "자치구" 등)
         
         [OUTPUT FORMAT]
         Return ONLY a single valid JSON object:
@@ -79,7 +80,12 @@ class LLMService:
                     "house_type": "string",
                     "deposit": 10000,
                     "monthly_rent": 50,
-                    "raw_text_reference": "string"
+                    "raw_text_reference": "string",
+                    "extra_info": {{
+                        "방개수": "3개",
+                        "주차대수": "1.2대",
+                        "승강기": "있음"
+                    }}
                 }},
                 ...
             ]
