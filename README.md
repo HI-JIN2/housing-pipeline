@@ -1,58 +1,73 @@
-# Housing Pipeline 프로젝트
+# 🏢 Housing Pipeline: AI-Powered Real Estate Dispatcher
 
-부동산/청약 공고문(PDF, XLSX)을 업로드하여 데이터 구조화부터 위치 정보 기반 검색 및 보강을 수행하는 2-Agent 기반 데이터 파이프라인입니다.
-
-## 시스템 구조 (Architecture)
-
-1. **Parser Agent (`localhost:8000`)** 
-   - 문서를 쉽게 업로드하고 과거 내역을 조회할 수 있는 웹 UI를 제공합니다.
-   - 업로드된 문서에서 `pdfplumber`와 `openpyxl`을 활용해 텍스트를 추출합니다.
-   - 추출된 텍스트를 **Google Gemini API**를 통해 지정된 JSON 스키마 형태로 파싱합니다.
-   - MongoDB 기반 저장소를 활용하여 다중 형식으로 파싱된 결과를 보관하며, 중복 공고의 문서 캐싱을 통해 인프라 비용을 절감합니다.
-   - 구조화된 데이터(호수, 가격, 주소 등)를 분석 즉시 **Geo Agent**의 HTTP 엔드포인트로 전송합니다.
-
-2. **Geo Agent (`localhost:8001`)**
-   - Parser Agent로부터 전달받은 주택 데이터를 실시간으로 보강 처리합니다.
-   - **카카오 Local API**를 이용해 주소를 지리적 좌표로 변환(Geocoding)합니다.
-   - **PostGIS**를 활용하여 가장 가까운 지하철역과 최단 도보 거리를 연산합니다.
-   - 위치 정보 캐시를 거쳐 외부 API의 불필요한 호출을 제한합니다.
-
-3. **인프라 (Docker-Compose)**
-   - `PostGIS`: 지리 정보 보강을 위한 공간(Spatial) 쿼리 데이터베이스
-   - `MongoDB`: 가변적인 JSON 구조에 대응하는 문서 저장소 및 LLM 호출 비용 최적화를 위한 캐시 서버
+부동산/청약 공고문(PDF, XLSX)에서 핵심 정보를 AI(Gemini)로 자동 추출하고, 위치 정보 보강 및 지하철역 도보 거리를 연산해주는 **지능형 주택 공고 분석 파이프라인**입니다.
 
 ---
 
-## 빠른 시작 (Quick Start)
+## ✨ Key Features
 
-단일 실행 스크립트(`start_all.sh`)를 사용하여 백그라운드 인프라와 서버 컴포넌트를 동시에 구동할 수 있습니다.
+- **📄 Smart Document Parsing**: PDF 및 엑셀 공고문에서 주택명, 공급호수, 주소, 임대료 등을 LLM(Gemini)으로 즉시 구조화
+- **🚄 Geo-Enrichment**: 추출된 주소의 좌표를 찾고, PostGIS를 통해 **가장 가까운 지하철역명과 실제 도보 거리**를 계산
+- **🗄️ Flexible Storage**: 가변적인 공고 형식에 대응하기 위해 MongoDB를 사용하며, 동일 공고 재분석 시 비용 절감을 위한 캐싱 적용
+- **⚡ Lightweight Architecture**: Kafka/Zookeeper 등 무거운 인프라를 제거한 **HTTP 기반 2-Agent 구조**로 저사양 서버에서도 구동 가능 (Oracle Cloud Always Free 타겟)
 
-### 1. 환경 설정 (.env)
-루트 디렉토리에 `.env` 파일을 생성하고 아래 설정값을 기입합니다.
+---
+
+## 🏗️ Architecture
+
+시스템은 두 개의 독립적인 에이전트로 구성됩니다:
+
+1. **Parser Agent (`:8000`)**: 
+   - **UI**: 사용자가 파일을 드래그하여 업로드하고 분석 결과를 시각적으로 확인
+   - **Logic**: 문서 텍스트 추출 -> Gemini API 파싱 -> MongoDB 저장 -> Geo Agent 호출
+2. **Geo Agent (`:8001`)**: 
+   - **Enrichment**: 카카오 로컬 API 지오코딩 + PostGIS 공간 쿼리 (지하철역 매칭)
+   - **Persistence**: 보강된 최종 데이터를 PostgreSQL에 저장
+
+---
+
+## 🚀 Quick Start
+
+### 1. 전제 조건 (Prerequisites)
+- Docker Desktop (or Docker Engine)
+- Python 3.9+ 
+- Google Gemini API Key & Kakao REST API Key
+
+### 2. 환경 설정 (.env)
+프로젝트 루트에 `.env` 파일을 생성합니다. (또는 `README.md`의 예시 참고)
 ```env
-# Google Gemini LLM 파서 설정
-GEMINI_API_KEY="발급받은 키 입력"
+# API Keys
+GEMINI_API_KEY="your_gemini_key"
+KAKAO_REST_API_KEY="your_kakao_key"
 
-# 카카오 길찾기 API 설정
-KAKAO_API_KEY="발급받은 REST API 키 입력"
-
-# 설정 기본값
+# Database Connections
 POSTGRES_DSN="postgresql://housing_user:housing_password@127.0.0.1:5433/housing_db"
 MONGO_URL="mongodb://127.0.0.1:27017"
 ```
 
-### 2. 통합 실행 스크립트 구동
+### 3. 원클릭 실행 (One-Step Run)
 ```bash
+chmod +x start_all.sh
 ./start_all.sh
 ```
-> 자동화 스크립트 실행 시 패키지 의존성 설치, PostGIS 역 좌표 데이터 초기 적재가 병렬로 진행되며 서버가 구동됩니다.
-> 종료를 원하실 경우 터미널에서 `Ctrl + C`를 입력하여 안전하게 모든 프로세스를 중지시킵니다.
+> 스크립트 실행 시 **좀비 프로세스 정리, 인프라 부팅, 의존성 설치, 지하철 역 DB 초기화**가 자동으로 진행됩니다.
 
 ---
 
-## 사용 방법
+## ☁️ Cloud Deployment
+운영 서버 배포를 위해 다음의 가이드를 제공합니다:
+- **Terraform**: [terraform/](file:///Users/yujin/PycharmProjects/housing-pipeline/terraform/) 폴더의 코드를 통해 OCI 인프라 자동 구축 가능
+- **배포 가이드**: [production_deployment.md](file:///Users/yujin/.gemini/antigravity/brain/af93b895-4fc5-4130-b641-6d42c35481f9/production_deployment.md) 참고
 
-1. 브라우저에서 `http://localhost:8000`에 접속합니다.
-2. 분석 대상인 문서(`PDF` 또는 `XLSX`)를 최대 3개까지 드래그하여 업로드합니다.
-3. 웹 UI 화면에서 즉시 구조화된 결과 및 최근 분석 조회 내역을 확인할 수 있습니다.
-4. 시스템 커맨드라인 로그를 통해 Geo Agent 측의 데이터베이스 처리 트랜잭션을 실시간 모니터링할 수 있습니다.
+---
+
+## 🛠️ Tech Stack
+- **Backend**: FastAPI, Uvicorn, Motor (Async MongoDB), Asyncpg
+- **AI**: Google Gemini API (Generative AI)
+- **Database**: MongoDB (Raw/Parsed), PostgreSQL/PostGIS (Enriched)
+- **DevOps**: Docker Compose, Terraform (OCI)
+
+---
+
+## 🤝 Contribution
+분석이 실패하는 공고문이 있다면 `issues`에 제보해 주세요! 🚀
