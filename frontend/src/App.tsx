@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Upload, FileText, ChevronRight, Loader2, AlertCircle, Home, MapPin, BadgeCent } from 'lucide-react';
+import { Upload, FileText, ChevronRight, Loader2, AlertCircle, Home, MapPin, BadgeCent, Map as MapIcon, Layers } from 'lucide-react';
+import MapView from './components/MapView';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -16,6 +17,11 @@ interface House {
   deposit: number;
   monthly_rent: number;
   raw_text_reference: string;
+  lat?: number;
+  lng?: number;
+  nearest_station?: string;
+  distance_meters?: number;
+  walking_time_mins?: number;
 }
 
 interface Announcement {
@@ -205,14 +211,21 @@ const App: React.FC = () => {
             ) : detail ? (
               <>
                 <div className="px-8 py-6 border-b border-slate-50 bg-slate-50/50 rounded-t-3xl">
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center justify-between mb-1">
                     <span className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded-md text-[10px] font-bold uppercase tracking-wider">Analysis Result</span>
+                    <div className="flex items-center gap-1 text-[10px] text-slate-400 font-bold uppercase">
+                      <MapIcon className="w-3 h-3" /> {detail.filter(h => h.lat).length} Markers
+                    </div>
                   </div>
                   <h2 className="text-2xl font-bold text-slate-800">
                     {announcements.find(a => a.id === selectedId)?.title}
                   </h2>
+                  
+                  {/* Map View Integration */}
+                  <MapView houses={detail} />
                 </div>
-                <div className="flex-1 p-8 space-y-6 overflow-y-auto max-h-[800px]">
+                
+                <div className="flex-1 p-8 space-y-6 overflow-y-auto max-h-[600px]">
                   {detail.map((house, idx) => (
                     <div key={idx} className="p-6 rounded-2xl border border-slate-100 bg-white hover:border-indigo-200 transition-all shadow-sm hover:shadow-md">
                       <div className="flex justify-between items-start mb-4">
@@ -226,6 +239,16 @@ const App: React.FC = () => {
                           <div>
                             <p className="text-[10px] font-bold text-slate-400 uppercase">Address</p>
                             <p className="text-sm text-slate-600">{house.address}</p>
+                            {house.nearest_station && (
+                              <div className="flex items-center gap-1 mt-1">
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded flex items-center gap-0.5">
+                                  <Layers className="w-2 h-2" /> {house.nearest_station}역
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-medium">
+                                  도보 {house.walking_time_mins}분 ({house.distance_meters}m)
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-start gap-3">
