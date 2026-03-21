@@ -13,6 +13,13 @@ from main import kafka_producer
 router = APIRouter()
 llm_service = LLMService()
 
+@router.get("/config")
+def get_config():
+    # .env 파일에 유효한 gemini key가 설정되어 있는지 확인합니다.
+    api_key = getattr(llm_service, "api_key", None)
+    has_key = bool(api_key and api_key != "your_gemini_api_key_here")
+    return {"has_gemini_key": has_key}
+
 @router.post("/upload")
 async def upload_file(files: list[UploadFile] = File(...), gemini_key: Optional[str] = Form(None)):
     if len(files) > 3:

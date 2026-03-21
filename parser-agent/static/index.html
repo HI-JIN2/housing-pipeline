@@ -183,8 +183,8 @@
         <h1>Housing Pipeline</h1>
         <p class="subtitle">청약/매물 문서(.pdf, .xlsx)를 업로드하면 자동으로 구조화됩니다.</p>
         
-        <div class="api-key-container" style="margin-bottom: 1.5rem;">
-            <input type="password" id="geminiKey" placeholder="Gemini API Key 입력 (선택, .env 미설정 시 필수)" style="width: 100%; padding: 0.75rem; border-radius: 8px; border: 1px solid #cbd5e1; outline: none; box-sizing: border-box; font-size: 1rem; transition: border-color 0.3s ease;">
+        <div class="api-key-container" id="apiKeyContainer" style="margin-bottom: 1.5rem; display: none;">
+            <input type="password" id="geminiKey" placeholder="Gemini API Key 입력 (.env 미설정 시 필수)" style="width: 100%; padding: 0.75rem; border-radius: 8px; border: 1px solid #cbd5e1; outline: none; box-sizing: border-box; font-size: 1rem; transition: border-color 0.3s ease;">
         </div>
 
         <div class="dropzone" id="dropzone">
@@ -220,6 +220,20 @@
     const resultBadge = document.getElementById('resultBadge');
     const errorMessage = document.getElementById('errorMessage');
     const geminiKeyInput = document.getElementById('geminiKey');
+    const apiKeyContainer = document.getElementById('apiKeyContainer');
+
+    // Load initial config
+    document.addEventListener('DOMContentLoaded', async () => {
+        try {
+            const res = await fetch('/api/config');
+            const data = await res.json();
+            if (!data.has_gemini_key) {
+                apiKeyContainer.style.display = 'block';
+            }
+        } catch (e) {
+            console.error("설정 정보를 불러오는데 실패했습니다.", e);
+        }
+    });
 
     // Drag and drop handlers
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
