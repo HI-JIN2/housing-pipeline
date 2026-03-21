@@ -176,10 +176,10 @@ class LLMService:
                 You are a data extraction robot. Your purpose is FULL DATA RECALL.{retry_hint}
                 
                 [INPUT FORMAT] 
-                The text below contains Markdown tables and layout-preserved text from an official housing announcement PDF.
+                The text below contains CSV-formatted tables (bounded by [TABLE START (CSV)]) and layout-preserved text from an official housing announcement PDF.
                 
                 [CRITICAL INSTRUCTIONS]
-                1. ANALYZE every row in the Markdown tables.
+                1. ANALYZE every row in the CSV tables.
                 2. Extract EVERY SINGLE housing unit/item mentioned.
                 3. DO NOT SUMMARIZE multiple items into one.
                 4. DO NOT SKIP ANY ROWS.
