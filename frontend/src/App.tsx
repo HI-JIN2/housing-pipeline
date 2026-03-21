@@ -55,6 +55,7 @@ const App: React.FC = () => {
   const [isConfirmingUpload, setIsConfirmingUpload] = useState(false); // Added this state based on handleFileChange content
   const [expectedCount, setExpectedCount] = useState(''); // Added this state based on handleFileChange content
   const [userApiKey, setUserApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
+  const [isCoffeeOpen, setIsCoffeeOpen] = useState(false);
 
   useEffect(() => {
     fetchAnnouncements();
