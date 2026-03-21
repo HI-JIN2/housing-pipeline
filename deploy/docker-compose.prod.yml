@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  # Python Parser Agent
+  parser-agent:
+    image: ${DOCKER_IMAGE_PARSER:-parser-agent:latest}
+    build:
+      context: ../
+      dockerfile: parser-agent/Dockerfile
+    restart: always
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017
+      - GEO_AGENT_URL=http://geo-agent:8001/api/enrich
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      - mongodb
+
+  # Python Geo Agent
+  geo-agent:
+    image: ${DOCKER_IMAGE_GEO:-geo-agent:latest}
+    build:
+      context: ../
+      dockerfile: geo-agent/Dockerfile
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql://housing_user:housing_password@db:5432/housing_db
+    depends_on:
+      - db
+
+  # Frontend (Vite + Nginx)
+  frontend:
+    image: ${DOCKER_IMAGE_FRONTEND:-frontend:latest}
+    build:
+      context: ../
+      dockerfile: frontend/Dockerfile
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - parser-agent
+
+  # Databases
+  mongodb:
+    image: mongo:latest
+    restart: always
+    volumes:
+      - mongo_data:/data/db
+
+  db:
+    image: postgis/postgis:15-3.3
+    restart: always
+    environment:
+      - POSTGRES_USER=housing_user
+      - POSTGRES_PASSWORD=housing_password
+      - POSTGRES_DB=housing_db
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+volumes:
+  db_data:
+  mongo_data:

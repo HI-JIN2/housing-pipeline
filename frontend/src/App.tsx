@@ -45,6 +45,10 @@ const App: React.FC = () => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedHouseId, setSelectedHouseId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isConfirmingUpload, setIsConfirmingUpload] = useState(false);
+  const [expectedCount, setExpectedCount] = useState<number | string>('');
+  const [pendingFiles, setPendingFiles] = useState<FileList | null>(null);
+  const [isCoffeeOpen, setIsCoffeeOpen] = useState(false);
 
   useEffect(() => {
     fetchAnnouncements();
@@ -71,14 +75,25 @@ const App: React.FC = () => {
     }
   };
 
-  const onFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return;
+    setPendingFiles(e.target.files);
+    setIsConfirmingUpload(true);
+    setExpectedCount('');
+  };
+
+  const onFileUpload = async () => {
+    if (!pendingFiles) return;
     
     setUploading(true);
+    setIsConfirmingUpload(false);
     const formData = new FormData();
-    Array.from(e.target.files).forEach(file => {
+    Array.from(pendingFiles).forEach(file => {
       formData.append('files', file);
     });
+    if (expectedCount) {
+      formData.append('expected_count', expectedCount.toString());
+    }
     
     try {
       await axios.post('/api/upload', formData, {
@@ -90,6 +105,7 @@ const App: React.FC = () => {
       setError('업로드 중 오류가 발생했습니다.');
     } finally {
       setUploading(false);
+      setPendingFiles(null);
     }
   };
 
@@ -119,15 +135,6 @@ const App: React.FC = () => {
             <Library className="w-6 h-6" />
             <div className="absolute left-full ml-3 px-2 py-1 bg-slate-800 text-white text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">공고 목록</div>
           </button>
-          
-          <label className={cn(
-            "p-3 rounded-2xl transition-all relative group cursor-pointer shadow-sm",
-            uploading ? "bg-indigo-600 text-white animate-pulse" : "text-slate-400 hover:text-white hover:bg-slate-800"
-          )} title="새 공고 업로드">
-            {uploading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Plus className="w-6 h-6" />}
-            <input type="file" multiple className="hidden" onChange={onFileUpload} disabled={uploading} />
-            <div className="absolute left-full ml-3 px-2 py-1 bg-slate-800 text-white text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">새 공고 업로드</div>
-          </label>
         </div>
       </nav>
 
@@ -281,6 +288,25 @@ const App: React.FC = () => {
             </div>
             
             <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+              {/* Add New Announcement Card */}
+              <label className={cn(
+                "p-6 rounded-[2.5rem] border-2 border-dashed transition-all cursor-pointer group flex flex-col items-center justify-center gap-2",
+                uploading 
+                  ? "bg-indigo-50 border-indigo-200 cursor-not-allowed" 
+                  : "bg-slate-50 border-slate-200 hover:bg-white hover:border-indigo-400 hover:shadow-xl"
+              )}>
+                {uploading ? (
+                  <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+                ) : (
+                  <Plus className="w-8 h-8 text-slate-400 group-hover:text-indigo-600" />
+                )}
+                <div className="text-center">
+                  <span className="block text-sm font-black text-slate-800">찾는 공고가 없나요?</span>
+                  <span className="block text-xs font-bold text-slate-400 group-hover:text-indigo-500">새로운 공고 추가하기</span>
+                </div>
+                <input type="file" multiple className="hidden" onChange={handleFileChange} disabled={uploading} />
+              </label>
+
               {announcements.map((a) => (
                 <div 
                   key={a.id}
@@ -311,30 +337,83 @@ const App: React.FC = () => {
         </>
       )}
 
-      {/* Responsive Kakao Pay Button */}
-      <a 
-        href="https://qr.kakaopay.com/Ej88F1kMG" 
-        target="_blank" 
-        rel="noreferrer"
-        className="fixed bottom-6 right-6 lg:bottom-10 lg:right-10 group hover:-translate-y-1 transition-transform z-50 flex items-center justify-center p-0 bg-transparent"
-      >
-        <picture>
-          <source 
-            media="(max-width: 640px)" 
-            srcSet="http://localhost:8000/static/images/btn_send_tiny.png" 
-          />
-          <source 
-            media="(max-width: 1024px)" 
-            srcSet="http://localhost:8000/static/images/btn_send_small.png" 
-          />
-          <img 
-            src="http://localhost:8000/static/images/btn_send_regular.png" 
-            alt="카카오페이" 
-            className="h-8 md:h-10 lg:h-12 block filter drop-shadow-[0_5px_8px_rgba(0,0,0,0.3)] rounded-xl"
-            onError={(e) => (e.currentTarget.style.display = 'none')}
-          />
-        </picture>
-      </a>
+      {/* 4. Upload Confirmation Modal */}
+      {isConfirmingUpload && (
+        <>
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] animate-in fade-in" onClick={() => setIsConfirmingUpload(false)} />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] bg-white shadow-2xl z-[80] p-8 rounded-[2.5rem] animate-in zoom-in-95 duration-300">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-4">
+                <FileText className="w-8 h-8" />
+              </div>
+              <h2 className="text-2xl font-black text-slate-800 tracking-tight">분석 시작하기</h2>
+              <p className="text-sm text-slate-400 mt-2 font-medium">선택하신 {pendingFiles?.length}개의 파일을 분석합니다.<br/>공고에 포함된 총 주택 개수를 입력해주세요.</p>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 px-1">예상 주택 개수 (선택)</label>
+                <input 
+                  type="number" 
+                  placeholder="예: 261"
+                  className="w-full px-5 py-3 bg-slate-100 border-none rounded-2xl text-lg font-bold focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                  value={expectedCount}
+                  onChange={(e) => setExpectedCount(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button 
+                  onClick={() => setIsConfirmingUpload(false)}
+                  className="flex-1 px-5 py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl hover:bg-slate-200 transition-all"
+                >
+                  취소
+                </button>
+                <button 
+                  onClick={onFileUpload}
+                  className="flex-1 px-5 py-3 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all"
+                >
+                  분석 시작
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 5. Coffee Donation Floating UI */}
+      <div className="fixed bottom-6 right-6 lg:bottom-10 lg:right-10 z-[100] flex flex-col items-end gap-3">
+        {isCoffeeOpen && (
+          <div className="bg-white p-4 shadow-2xl border border-slate-100 rounded-[2rem] animate-in slide-in-from-bottom-4 duration-300 flex flex-col items-center gap-3 w-48">
+            <span className="text-sm font-black text-slate-800 text-center">개발자에게 커피 사주기</span>
+            <a 
+              href="https://qr.kakaopay.com/Ej88F1kMG" 
+              target="_blank" 
+              rel="noreferrer"
+              className="group hover:scale-105 transition-transform"
+            >
+              <picture>
+                <source media="(max-width: 640px)" srcSet="http://localhost:8000/static/images/btn_send_small.png" />
+                <img 
+                  src="http://localhost:8000/static/images/btn_send_regular.png" 
+                  alt="카카오페이" 
+                  className="h-10 block filter drop-shadow-[0_4px_6px_rgba(0,0,0,0.2)] rounded-xl"
+                  onError={(e) => (e.currentTarget.style.display = 'none')}
+                />
+              </picture>
+            </a>
+          </div>
+        )}
+        <button 
+          onClick={() => setIsCoffeeOpen(!isCoffeeOpen)}
+          className={cn(
+            "w-12 h-12 lg:w-14 lg:h-14 bg-white shadow-2xl border border-slate-100 rounded-full flex items-center justify-center text-2xl hover:scale-110 active:scale-95 transition-all outline-none",
+            isCoffeeOpen && "bg-indigo-600 border-indigo-700 shadow-indigo-200"
+          )}
+        >
+          {isCoffeeOpen ? <X className="w-6 h-6 text-white" /> : '☕'}
+        </button>
+      </div>
 
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {

@@ -58,7 +58,11 @@ async def get_announcement_details(announcement_id: str):
     return {"status": "success", "data": results}
 
 @router.post("/upload")
-async def upload_file(files: list[UploadFile] = File(...), gemini_key: Optional[str] = Form(None)):
+async def upload_file(
+    files: list[UploadFile] = File(...), 
+    gemini_key: Optional[str] = Form(None),
+    expected_count: Optional[int] = Form(None)
+):
     if len(files) > 3:
         raise HTTPException(status_code=400, detail="Maximum 3 files allowed")
 
@@ -83,7 +87,11 @@ async def upload_file(files: list[UploadFile] = File(...), gemini_key: Optional[
                 continue
                 
             try:
-                parsed_result = await llm_service.parse_housing_data(extracted_text, api_key=gemini_key)
+                parsed_result = await llm_service.parse_housing_data(
+                    extracted_text, 
+                    api_key=gemini_key, 
+                    expected_count=expected_count
+                )
                 if parsed_result:
                     houses = parsed_result.get("houses", [])
                     all_houses.extend(houses)

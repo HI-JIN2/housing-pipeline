@@ -17,7 +17,7 @@ class LLMService:
         
         self.mongo_service = MongoService()
 
-    async def parse_housing_data(self, text: str, api_key: str = None) -> List[ParsedHousingData]:
+    async def parse_housing_data(self, text: str, api_key: str = None, expected_count: Optional[int] = None):
         current_api_key = api_key or self.api_key
         if not current_api_key or current_api_key == "your_gemini_api_key_here":
             raise ValueError("Gemini API key is not set. Please provide it in the UI or .env file.")
@@ -32,32 +32,36 @@ class LLMService:
             if cached_data:
                 print(f"Cache hit from MongoDB for hash {text_hash}")
                 if isinstance(cached_data, dict):
-                    # New format already contains 'houses', 'announcement_title', etc.
                     return cached_data
                 elif isinstance(cached_data, list):
-                    # Legacy format: only a list of houses
                     return {"houses": cached_data}
         except Exception as e:
             print(f"Error reading mongo cache: {e}")
+
+        count_instruction = f"I expect exactly {expected_count} housing units in this text. DO NOT SKIP ANY." if expected_count else ""
 
         prompt = f"""
         You are an expert real estate data extraction agent. 
         Your task is to extract structural information for EVERY housing unit/apartment mentioned in the provided text.
         
+        {count_instruction}
+
         [CRITICAL INSTRUCTIONS]
-        1. **Completeness**: Do not skip any items. If there are hundreds of items in a table, extract all of them.
-        2. **Accuracy**: Ensure the address, deposit, and rent are captured exactly as they appear.
-        3. **Context**: If the text is from a table, map the headers correctly to the fields.
+        1. **Completeness**: Do not skip any items. Even if there are hundreds of items in a table, extract all of them. Use all your available output capacity.
+        2. **Monthly Rent Accuracy**: Pay extremely close attention to columns labeled "월임대료", "임대료", or "월세". 
+           - Ensure you do not default to 0 if a value is present later in the table.
+           - Check if there are different rent values for different social brackets (e.g., General vs. Vulnerable groups) and pick the standard/general one unless specified.
+        3. **Accuracy**: Ensure the address, deposit, and rent are captured exactly as they appear.
         4. **Handling Units**: 
            - Deposit and Monthly Rent should be in 'ten thousand KRW' (만원) units. 
            - Example: 150,000,000 KRW -> 15000. 500,000 KRW -> 50.
         
         [JSON SCHEMA]
         Extract each item into the following format:
-        - id: Unique ID (announcement name + index or similar)
+        - id: Unique ID (announcement name + index)
         - name: Apartment/Housing name (e.g., 'OO Apartment', 'Happy House')
         - address: Full detailed address
-        - house_type: Housing type/size (e.g., 'Two-room', '59A', '84B', 'Exclusive 39m2')
+        - house_type: Housing type/size (e.g., '39A', 'Exclusive 59m2')
         - deposit: Security deposit (Integer, unit: 10,000 KRW)
         - monthly_rent: Monthly rent (Integer, unit: 10,000 KRW, 0 if not applicable)
         - raw_text_reference: A snippet of the original text from which this data was derived.
@@ -65,6 +69,8 @@ class LLMService:
         [OUTPUT FORMAT]
         Return ONLY a single valid JSON object:
         {{
+            "announcement_title": "string",
+            "announcement_description": "string",
             "houses": [
                 {{
                     "id": "string",
