@@ -197,174 +197,144 @@ class LLMService:
 
         while retry_count < max_retries:
             all_houses = []
-            
-            for idx, chunk_text in enumerate(chunks):
-                print(f"Processing Chunk {idx+1}/{len(chunks)} (Attempt {retry_count+1})...")
-                
-                # Dynamic hint for retries
-                retry_hint = ""
-                if retry_count > 0:
-                    retry_hint = f"\n[RETRY HINT] Previous attempt only found {len(final_houses)} items but we expect {expected_count}. BE EVEN MORE EXHAUSTIVE. DO NOT MISS ANY ROWS."
+            final_title = ""
+            completed_chunks = 0
+            semaphore = asyncio.Semaphore(3)
 
-                prompt = f"""
-                [EXTRACTOR MODE: MECHANICAL & EXHAUSTIVE]
-                You are a data extraction robot. Your purpose is FULL DATA RECALL.{retry_hint}
+            async def process_chunk_worker(idx, chunk_text):
+                nonlocal completed_chunks, final_title
                 
-                [INPUT FORMAT] 
-                The text below contains CSV-formatted tables (bounded by [TABLE START (CSV)]) and layout-preserved text from an official housing announcement PDF.
-                
-                [CRITICAL INSTRUCTIONS]
-                1. ANALYZE every row in the CSV tables.
-                2. Extract EVERY SINGLE housing unit/item mentioned (No summarizing).
-                3. Mandatory Fields:
-                   - "index": Number corresponding to '번호'.
-                   - "district": '자치구' (e.g. 성북구, 은평구).
-                   - "complex_no": '단지번호'.
-                   - "name": '단지명/주택명'.
-                   - "address": '주소'.
-                   - "unit_no": '호' or '동호'.
-                   - "area": '면적' or '전용면적' (as a number).
-                   - "elevator": '승강기' (있음/없음 or Y/N).
-                   - "deposit": '보증금' (number in 만원).
-                   - "monthly_rent": '임대료' (number in 만원).
-                4. [FLEIXIBLE EXTRA INFO]: Every other column or piece of text not in mandatory list MUST be captured in "extra_info" using descriptive keys. Use MongoDB's schema flexibility - capture everything you find in the PDF.
-                5. Return ONLY a valid JSON object.
+                async with semaphore:
+                    print(f"📡 Processing Chunk {idx+1}/{len(chunks)} (Attempt {retry_count+1})...")
+                    
+                    retry_hint = ""
+                    if retry_count > 0:
+                        retry_hint = f"\n[RETRY HINT] Previous attempt missed some items. BE EVEN MORE EXHAUSTIVE. DO NOT MISS ANY ROWS."
 
-                [JSON SCHEMA]
-                {{
-                    "announcement_title": "string",
-                    "houses": [
-                        {{
-                            "index": number,
-                            "district": "string",
-                            "complex_no": "string",
-                            "name": "string",
-                            "address": "string", 
-                            "unit_no": "string",
-                            "area": number,
-                            "house_type": "string",
-                            "elevator": "string",
-                            "deposit": number,
-                            "monthly_rent": number,
-                            "extra_info": {{ "any_other_column": "value" }}
-                        }}
-                    ]
-                }}
-                
-                [INPUT TEXT]
-                {chunk_text}
-                """
-                
-                model_switch_count = 0
-                max_switches = len(self.available_models)
+                    prompt = f"""
+                    [EXTRACTOR MODE: MECHANICAL & EXHAUSTIVE]
+                    You are a data extraction robot. Your purpose is FULL DATA RECALL.{retry_hint}
+                    
+                    [INPUT FORMAT] 
+                    The text below contains CSV-formatted tables (bounded by [TABLE START (CSV)]) and layout-preserved text from an official housing announcement PDF.
+                    
+                    [CRITICAL INSTRUCTIONS]
+                    1. ANALYZE every row in the CSV tables.
+                    2. Extract EVERY SINGLE housing unit/item mentioned                    3. Mandatory Fields:
+                       - "index": Number corresponding to '번호'.
+                       - "district": '자치구' (e.g. 성북구, 은평구).
+                       - "complex_no": '단지번호'.
+                       - "address": '주소'.
+                       - "unit_no": '호' or '동호'.
+                       - "area": '면적' or '전용면적' (as a number).
+                       - "elevator": '승강기' (있음/없음 or Y/N).
+                       - "deposit": '보증금' (number in 만원).
+                       - "monthly_rent": '임대료' (number in 만원).
+                    4. [FLEIXIBLE EXTRA INFO]: Every other column or piece of text not in mandatory list MUST be captured in "extra_info" using descriptive keys. Use MongoDB's schema flexibility - capture everything you find in the PDF.
+                    5. Return ONLY a valid JSON object.
 
-                # Rate-limit aware call with 429 handling
-                for call_retry in range(5): # Increase retries for model switching
-                    try:
-                        await update_status(len(all_houses), f"AI_ANALYZING_CHUNK_{idx+1}")
-                        
-                        if provider == "openai":
-                            # OpenAI Parsing
-                            response = client.chat.completions.create(
-                                model=active_model,
-                                messages=[{"role": "user", "content": prompt}],
-                                response_format={ "type": "json_object" },
-                                temperature=0.2 if retry_count > 0 else 0.0
-                            )
-                            response_text = response.choices[0].message.content
-                        else:
-                            # Gemini Parsing
-                            response = await gemini_client.aio.models.generate_content(
-                                model=active_model,
-                                contents=prompt,
-                                config=types.GenerateContentConfig(
-                                    response_mime_type="application/json",
+                    [JSON SCHEMA]
+                    {{
+                        "announcement_title": "string",
+                        "houses": [
+                            {{
+                                "index": number,
+                                "district": "string",
+                                "complex_no": "string",
+                                "address": "string", 
+                                "unit_no": "string",
+                                "area": number,
+                                "house_type": "string",
+                                "elevator": "string",
+                                "deposit": number,
+                                "monthly_rent": number,
+                                "extra_info": {{ "any_other_column": "value" }}
+                            }}
+                        ]
+                    }}
+                    
+                    [INPUT TEXT]
+                    {chunk_text}
+                    """
+                    
+                    local_model = active_model
+                    for call_retry in range(5):
+                        try:
+                            if provider == "openai":
+                                response = client.chat.completions.create(
+                                    model=local_model,
+                                    messages=[{"role": "user", "content": prompt}],
+                                    response_format={ "type": "json_object" },
                                     temperature=0.2 if retry_count > 0 else 0.0
                                 )
-                            )
-                            response_text = response.text
-                        
-                        # LOG RESPONSE (Request from USER)
-                        print(f"--- LLM RESPONSE (Chunk {idx+1}) ---")
-                        print(response_text[:1000] + ("..." if len(response_text) > 1000 else ""))
-                        
-                        parsed = json.loads(response_text)
-                        houses = parsed.get("houses", [])
-                        
-                        # Add all found houses (No more across-chunk deduplication as we have no overlap)
-                        all_houses.extend(houses)
-                        
-                        if not final_title: final_title = parsed.get("announcement_title", "")
-                        
-                        # Success - wait a bit to prevent 429 on next chunk
-                        await update_status(len(all_houses), f"ANALYZED_CHUNK_{idx+1}_OF_{len(chunks)}")
-                        if provider == "gemini":
-                            await asyncio.sleep(2) 
-                        break
+                                response_text = response.choices[0].message.content
+                            else:
+                                response = await gemini_client.aio.models.generate_content(
+                                    model=local_model,
+                                    contents=prompt,
+                                    config=types.GenerateContentConfig(
+                                        response_mime_type="application/json",
+                                        temperature=0.2 if retry_count > 0 else 0.0
+                                    )
+                                )
+                                response_text = response.text
+                            
+                            print(f"✅ Chunk {idx+1} successfully extracted.")
+                            parsed = json.loads(response_text)
+                            chunk_houses = parsed.get("houses", [])
+                            
+                            if not final_title and parsed.get("announcement_title"):
+                                final_title = parsed.get("announcement_title")
+                            
+                            completed_chunks += 1
+                            await update_status(len(all_houses) + len(chunk_houses), f"ANALYZED_{completed_chunks}_OF_{len(chunks)}_CHUNKS")
+                            
+                            if provider == "gemini":
+                                await asyncio.sleep(0.5)
+                                
+                            return chunk_houses
 
-                    except Exception as e:
-                        error_msg = str(e).lower()
-                        
-                        # OpenAI specific error handling (simplified)
-                        if provider == "openai":
+                        except Exception as e:
+                            error_msg = str(e).lower()
+                            print(f"⚠️ Error in Chunk {idx+1} (Call {call_retry+1}): {e}")
+                            
                             if "429" in error_msg:
-                                wait_time = 30 + (call_retry * 15)
-                                print(f"OpenAI Rate limited. Waiting {wait_time}s...")
+                                # Rate Limit handling
+                                wait_time = 5 + (call_retry * 5)
+                                if "quota" in error_msg or "limit exceeded" in error_msg:
+                                    # Hard quota limit, switch something
+                                    if provider == "gemini":
+                                        self._switch_model()
+                                        local_model = self.active_gemini_model
+                                        print(f"🔄 Switched to {local_model}")
+                                        wait_time = 2
+                                else:
+                                    print(f"RPM Limit. Waiting {wait_time}s...")
+                                
                                 await asyncio.sleep(wait_time)
                                 continue
-                            else:
-                                print(f"OpenAI Error: {e}")
-                                await update_status(len(all_houses), f"ERROR_CHUNK_{idx+1}", error=str(e))
-                                break
-
-                        # Case 1: Model not found (404) - Gemini
-                        if "404" in error_msg:
-                            model_switch_count += 1
-                            if model_switch_count >= max_switches:
-                                # Try switching API keys before giving up
-                                if self._switch_key():
-                                    model_switch_count = 0 
-                                    await update_status(len(all_houses), f"KEY_SWITCHED")
-                                    continue
-                                
-                                print(f"All models & keys returned 404 for chunk {idx+1}. Skipping.")
-                                await update_status(len(all_houses), f"ERROR_ALL_MODELS_404_CHUNK_{idx+1}")
-                                break
-                                
-                            new_model = self._switch_model(remove_current=True)
-                            active_model = new_model
-                            print(f"Model not found. Switched to {new_model}")
-                            await update_status(len(all_houses), f"MODEL_NOT_FOUND_SWITCHING_TO_{new_model}")
-                            await asyncio.sleep(2)
-                            continue
-
-                        # Case 2: Rate limit or Quota (429)
-                        if "429" in error_msg:
-                            # If it's a quota/limit error, try switching models/keys
-                            if "quota" in error_msg or "limit" in error_msg or "exceeded" in error_msg:
-                                model_switch_count += 1
-                                if model_switch_count >= max_switches:
-                                    if self._switch_key():
-                                        model_switch_count = 0
-                                        await update_status(len(all_houses), f"KEY_SWITCHED_DUE_TO_QUOTA")
-                                        continue
-                                    
-                                new_model = self._switch_model()
-                                print(f"Quota exceeded. Switched to {new_model}")
-                                await update_status(len(all_houses), f"QUOTA_EXCEEDED_SWITCHING_TO_{new_model}")
-                                await asyncio.sleep(5) 
-                                continue
                             
-                            # General rate limit (RPM)
-                            wait_time = 45 + (call_retry * 20)
-                            print(f"Rate limited (429). Waiting {wait_time}s...")
-                            await update_status(len(all_houses), f"RATE_LIMITED_WAITING_{wait_time}S")
-                            await asyncio.sleep(wait_time)
-                            continue
-                        else:
-                            print(f"Error in Chunk {idx+1}: {e}")
-                            await update_status(len(all_houses), f"ERROR_CHUNK_{idx+1}", error=str(e))
-                            break
+                            elif "404" in error_msg or "not found" in error_msg:
+                                if provider == "gemini":
+                                    local_model = self._switch_model(remove_current=True)
+                                    print(f"🚫 Model not found. Switched to {local_model}")
+                                    continue
+                                else:
+                                    break
+                            else:
+                                # Other errors
+                                await asyncio.sleep(2)
+                                continue
+                    return []
+
+            # Execute all chunks as concurrent tasks
+            tasks = [process_chunk_worker(i, chunk) for i, chunk in enumerate(chunks)]
+            results = await asyncio.gather(*tasks)
+            
+            # Aggregate results
+            for chunk_houses in results:
+                if chunk_houses:
+                    all_houses.extend(chunk_houses)
 
             # Check if we should retry
             if expected_count and len(all_houses) < (expected_count * 0.95):

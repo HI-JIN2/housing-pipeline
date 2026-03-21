@@ -6,7 +6,6 @@ class ParsedHousingData(BaseModel):
     index: Optional[int] = Field(None, description="번호")
     district: str = Field(description="자치구")
     complex_no: Optional[str] = Field(None, description="단지번호")
-    name: str = Field(description="단지명/주택명")
     address: str = Field(description="주택 상세 주소")
     unit_no: Optional[str] = Field(None, description="호수")
     area: float = Field(description="면적 (전용면적)")

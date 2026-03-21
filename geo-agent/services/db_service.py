@@ -1,6 +1,8 @@
 import asyncpg
 import os
-from typing import Optional
+import json
+import asyncio
+from typing import Optional, Any, Dict
 
 class DBService:
     def __init__(self):
@@ -8,7 +10,6 @@ class DBService:
         self.pool = None
 
     async def init_pool(self):
-        import asyncio
         # Try both 127.0.0.1 and localhost for robustness on Mac/Developer environments
         dsns_to_try = [self.dsn]
         if "127.0.0.1" in self.dsn:
@@ -77,19 +78,17 @@ class DBService:
                     index INTEGER,
                     district VARCHAR(100),
                     complex_no VARCHAR(100),
-                    name VARCHAR(255),
                     address TEXT,
                     unit_no VARCHAR(100),
                     area FLOAT,
-                    house_type VARCHAR(100),
-                    elevator VARCHAR(50),
+                    house_type TEXT,
+                    elevator TEXT,
                     deposit FLOAT,
                     monthly_rent FLOAT,
                     lat FLOAT,
                     lng FLOAT,
                     nearest_station VARCHAR(100),
                     distance_meters INTEGER,
-                    walking_time_mins INTEGER,
                     extra_info JSONB DEFAULT '{}',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
@@ -101,9 +100,8 @@ class DBService:
             print(f"Deleted housing data for announcement: {announcement_id}")
 
     async def find_nearest_station(self, lat: float, lng: float) -> tuple[Optional[str], int]:
-        """Returns (station_name, distance_in_meters). Walking time can be approximated later."""
+        """Returns (station_name, distance_in_meters)."""
         async with self.pool.acquire() as conn:
-            # Using ST_DistanceSphere for approximate distance in meters
             row = await conn.fetchrow("""
                 SELECT name, 
                        ST_DistanceSphere(location, ST_SetSRID(ST_MakePoint($1, $2), 4326)) as dist_meters
@@ -150,20 +148,19 @@ class DBService:
             data_dict.get('nearest_station'), data_dict.get('distance_meters'), data_dict.get('walking_time_mins'))
 
     async def save_enriched_data(self, data_dict: dict):
+        """Saves the final enriched house data to Postgres."""
         async with self.pool.acquire() as conn:
-            await conn.execute("""
+            query = """
                 INSERT INTO housing_data (
-                    id, announcement_id, index, district, complex_no, name, address, 
-                    unit_no, area, house_type, elevator, deposit, monthly_rent,
-                    lat, lng, nearest_station, distance_meters, walking_time_mins, extra_info
-                ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
-                ) ON CONFLICT (id) DO UPDATE SET
+                    id, announcement_id, index, district, complex_no, address, unit_no, 
+                    area, house_type, elevator, deposit, monthly_rent,
+                    lat, lng, nearest_station, distance_meters, extra_info
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                ON CONFLICT (id) DO UPDATE SET
                     announcement_id = EXCLUDED.announcement_id,
                     index = EXCLUDED.index,
                     district = EXCLUDED.district,
                     complex_no = EXCLUDED.complex_no,
-                    name = EXCLUDED.name,
                     address = EXCLUDED.address,
                     unit_no = EXCLUDED.unit_no,
                     area = EXCLUDED.area,
@@ -175,14 +172,34 @@ class DBService:
                     lng = EXCLUDED.lng,
                     nearest_station = EXCLUDED.nearest_station,
                     distance_meters = EXCLUDED.distance_meters,
-                    walking_time_mins = EXCLUDED.walking_time_mins,
                     extra_info = EXCLUDED.extra_info;
-            """,
-            data_dict.get('id'), data_dict.get('announcement_id'), 
-            data_dict.get('index'), data_dict.get('district'), data_dict.get('complex_no'),
-            data_dict.get('name'), data_dict.get('address'), data_dict.get('unit_no'),
-            data_dict.get('area'), data_dict.get('house_type'), data_dict.get('elevator'),
-            data_dict.get('deposit'), data_dict.get('monthly_rent'),
-            data_dict.get('lat'), data_dict.get('lng'), 
-            data_dict.get('nearest_station'), data_dict.get('distance_meters'), 
-            data_dict.get('walking_time_mins'), json.dumps(data_dict.get('extra_info', {})))
+            """
+            
+            await conn.execute(
+                query,
+                data_dict.get("id"),
+                data_dict.get("announcement_id"),
+                data_dict.get("index"),
+                data_dict.get("district"),
+                data_dict.get("complex_no"),
+                data_dict.get("address"),
+                data_dict.get("unit_no"),
+                data_dict.get("area"),
+                data_dict.get("house_type"),
+                data_dict.get("elevator"),
+                data_dict.get("deposit"),
+                data_dict.get("monthly_rent"),
+                data_dict.get("lat"),
+                data_dict.get("lng"),
+                data_dict.get("nearest_station"),
+                data_dict.get("distance_meters"),
+                json.dumps(data_dict.get("extra_info", {}))
+            )
+
+    async def get_enriched_data_by_ids(self, ids: list[str]) -> list[dict]:
+        """Fetch multiple enriched records by their unique IDs."""
+        if not ids:
+            return []
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("SELECT * FROM housing_data WHERE id = ANY($1)", ids)
+            return [dict(r) for r in rows]
