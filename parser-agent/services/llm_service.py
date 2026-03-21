@@ -35,39 +35,55 @@ class LLMService:
         except Exception as e:
             print(f"Error reading mongo cache: {e}")
 
-        # --- Deep Chunking Implementation ---
-        # 261 items is a lot. Smaller chunks (4k) with high overlap (1.5k) ensure Gemini doesn't get overwhelmed.
-        chunk_size = 4000
-        overlap = 1500
+        # --- Micro-Chunking Implementation (Nuclear Fix) ---
+        # Extremely small chunks to prevent LLM from summarizing.
+        chunk_size = 2000
+        overlap = 1000
         chunks = []
         for i in range(0, len(text), chunk_size - overlap):
             chunks.append(text[i:i + chunk_size])
             if i + chunk_size >= len(text):
                 break
 
-        print(f"Total text length: {len(text)}. Divided into {len(chunks)} smaller chunks (size={chunk_size}, overlap={overlap})")
+        print(f"Total text length: {len(text)}. Micro-chunked into {len(chunks)} fragments.")
         
         all_houses = []
         final_title = ""
         final_description = ""
-        seen_ids = set() # Prevent duplicates from overlap
+        seen_keys = set()
         
         for idx, chunk_text in enumerate(chunks):
-            print(f"Processing chunk {idx+1}/{len(chunks)}...")
+            print(f"Processing Micro-chunk {idx+1}/{len(chunks)}...")
             
             prompt = f"""
-            You are a rigorous data extraction robot. 
-            Extract ALL housing units mentioned in the text below. 
+            [EXTRACTOR MODE: MECHANICAL]
+            You are a data extraction robot. Your purpose is EXHAUSTIVE EXTRACTION.
             
-            [CHUNK INFO] Part {idx+1} of {len(chunks)}.
-            [EXPECTED TOTAL] Around {expected_count or "hundreds"}.
+            [CHUNK CONTEXT] Part {idx+1} of {len(chunks)}.
+            
+            [CRITICAL] Extract EVERY SINGLE housing unit/item mentioned in the [INPUT TEXT].
+            - DO NOT SUMMARIZE.
+            - DO NOT SKIP.
+            - DO NOT GENERALIZE.
+            - Extract even if the item is partial (the overlap will catch it).
+            - Return ONLY a valid JSON object.
 
-            [MUST-FOLLOW RULES]
-            1. **Exhaustive Extraction**: Extract EVERY SINGLE ROW/ITEM. Do not summarize. Do not skip. Even if there are 50 items in this chunk, list all 50.
-            2. **JSON Format**: Return ONLY a valid JSON object.
-            3. **Fields**: id, name, address, house_type, deposit (만원), monthly_rent (만원), raw_text_reference, extra_info (dict).
+            [JSON SCHEMA]
+            {{
+                "announcement_title": "string",
+                "houses": [
+                    {{
+                        "name": "string",
+                        "address": "string", 
+                        "house_type": "string",
+                        "deposit": number (만원),
+                        "monthly_rent": number (만원),
+                        "extra_info": {{}}
+                    }}
+                ]
+            }}
             
-            [TEXT CHUNK]
+            [INPUT TEXT]
             {chunk_text}
             """
             
@@ -76,7 +92,7 @@ class LLMService:
                     contents=prompt,
                     generation_config=genai.GenerationConfig(
                         response_mime_type="application/json",
-                        temperature=0.1 # Lower temperature for higher accuracy
+                        temperature=0.0 # Maximum determinism
                     )
                 )
                 
@@ -85,44 +101,45 @@ class LLMService:
                 
                 chunk_added = 0
                 for h in houses:
-                    # Create a unique key to avoid duplicates from overlaps
-                    h_key = f"{h.get('name')}-{h.get('address')}-{h.get('house_type')}"
-                    if h_key not in seen_ids:
+                    # Robust deduplication key
+                    h_key = f"{h.get('name')}-{h.get('address')}-{h.get('house_type')}-{h.get('deposit')}"
+                    if h_key not in seen_keys:
+                        # Add metadata for final validation
+                        h["chunk_source"] = idx+1
                         all_houses.append(h)
-                        seen_ids.add(h_key)
+                        seen_keys.add(h_key)
                         chunk_added += 1
                 
-                print(f"Chunk {idx+1}: Found {len(houses)} items, added {chunk_added} new items. (Total so far: {len(all_houses)})")
+                print(f"Chunk {idx+1}: Extracted {len(houses)}, Added {chunk_added} unique. Total unique: {len(all_houses)}")
                 
                 if not final_title: final_title = parsed.get("announcement_title", "")
-                if not final_description: final_description = parsed.get("announcement_description", "")
                     
             except Exception as e:
-                print(f"Error parsing chunk {idx+1}: {e}")
+                print(f"Error in Micro-chunk {idx+1}: {e}")
                 continue
 
-        # Convert to Pydantic models to validate and then dump
+        # Final Validation & Global ID assignment
         valid_houses = []
         for index, item in enumerate(all_houses):
             try:
-                # Ensure unique ID
-                item["id"] = f"house-{idx}-{index}"
+                # Assign stable global ID
+                item["id"] = f"house-global-{index+1}"
                 valid_houses.append(ParsedHousingData(**item).model_dump())
             except Exception as e:
-                # Silently skip bad items in the final list
+                # Log failed validation if needed
                 pass
 
         final_result = {
             "announcement_title": final_title,
-            "announcement_description": final_description,
+            "announcement_description": f"Extracted via Nuclear Micro-chunking. Total items: {len(valid_houses)}",
             "houses": valid_houses
         }
 
         # Save to MongoDB cache
         try:
             await self.mongo_service.save_cache(text_hash, final_result)
-            print(f"COMPLETED: Total {len(valid_houses)} results saved.")
+            print(f"FINAL RESULT: {len(valid_houses)} items stored.")
         except Exception as e:
-            print(f"Error writing mongo cache: {e}")
+            print(f"Cache write error: {e}")
             
         return final_result
