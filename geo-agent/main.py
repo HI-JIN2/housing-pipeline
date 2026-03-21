@@ -12,11 +12,6 @@ load_dotenv()
 
 from services.enrich_service import enrich_and_save, db_service
 
-# Direct health check
-@app.get("/api/health")
-def health_check():
-    return {"status": "ok", "message": "Geo Agent is running"}
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Starting Geo Agent...")
@@ -26,6 +21,11 @@ async def lifespan(app: FastAPI):
     await db_service.close_pool()
 
 app = FastAPI(title="Geo Agent (공고zip)", lifespan=lifespan)
+
+# Direct health check
+@app.get("/api/health")
+def health_check():
+    return {"status": "ok", "message": "Geo Agent is running"}
 
 @app.get("/")
 def health_check():
