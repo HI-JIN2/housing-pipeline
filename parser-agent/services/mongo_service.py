@@ -27,7 +27,7 @@ class MongoService:
         await self.announcements_collection.insert_one(announcement_data)
 
     async def get_recent_announcements(self, limit: int = 10) -> List[Dict[str, Any]]:
-        cursor = self.announcements_collection.find({}, {"_id": 0, "filename": 1, "parsed_houses": 1}).sort([("_id", -1)]).limit(limit)
+        cursor = self.announcements_collection.find({}, {"_id": 1, "filename": 1, "parsed_houses": 1}).sort([("_id", -1)]).limit(limit)
         results = await cursor.to_list(length=limit)
         
         summary = []
@@ -40,13 +40,36 @@ class MongoService:
             title = filename
             description = ""
             if house_count > 0:
-                title = houses[0].get("name", filename)
-                description = houses[0].get("address", "")
+                first_house = houses[0]
+                title = first_house.get("name", filename)
+                
+                parts = []
+                if first_house.get("house_type"):
+                    parts.append(first_house.get("house_type"))
+                if first_house.get("address"):
+                    parts.append(first_house.get("address"))
+                if first_house.get("raw_text_reference"):
+                    raw = first_house.get("raw_text_reference").replace("\n", " ")
+                    raw = raw[:60] + "..." if len(raw) > 60 else raw
+                    parts.append(raw)
+                
+                description = " | ".join(parts) if parts else filename
                 
             summary.append({
+                "id": str(doc["_id"]),
                 "filename": filename,
                 "title": title,
                 "description": description,
                 "house_count": house_count
             })
         return summary
+
+    async def get_announcement(self, announcement_id: str) -> Optional[Dict[str, Any]]:
+        from bson.objectid import ObjectId
+        try:
+            doc = await self.announcements_collection.find_one({"_id": ObjectId(announcement_id)})
+            if doc:
+                doc['_id'] = str(doc['_id'])
+            return doc
+        except Exception:
+            return None

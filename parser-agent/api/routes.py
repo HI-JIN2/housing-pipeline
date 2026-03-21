@@ -27,6 +27,13 @@ async def get_announcements():
     data = await mongo_service.get_recent_announcements(limit=20)
     return {"status": "success", "data": data}
 
+@router.get("/announcements/{announcement_id}")
+async def get_announcement_details(announcement_id: str):
+    data = await mongo_service.get_announcement(announcement_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"status": "success", "data": data.get("parsed_houses", [])}
+
 @router.post("/upload")
 async def upload_file(files: list[UploadFile] = File(...), gemini_key: Optional[str] = Form(None)):
     if len(files) > 3:
