@@ -56,6 +56,7 @@ const App: React.FC = () => {
   const [expectedCount, setExpectedCount] = useState(''); // Added this state based on handleFileChange content
   const [userApiKey, setUserApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
   const [isCoffeeOpen, setIsCoffeeOpen] = useState(false);
+  const [parsingStatus, setParsingStatus] = useState<string>('');
 
   useEffect(() => {
     fetchAnnouncements();
@@ -120,6 +121,8 @@ const App: React.FC = () => {
     
     setUploading(true);
     setIsConfirmingUpload(false);
+    setParsingStatus('문서에서 텍스트를 추출하는 중...');
+    
     const formData = new FormData();
     Array.from(pendingFiles).forEach(file => {
       formData.append('files', file);
@@ -131,6 +134,9 @@ const App: React.FC = () => {
     }
     
     try {
+      // Small artificial delay to show status
+      setTimeout(() => setParsingStatus('AI가 단지별 상세 정보를 구조화하고 있습니다 (2~3분 소요)...'), 1500);
+      
       const res = await axios.post('/api/upload', formData);
       setPreviewData({
         title: res.data.announcement_title,
@@ -143,12 +149,15 @@ const App: React.FC = () => {
     } finally {
       setUploading(false);
       setPendingFiles(null);
+      setParsingStatus('');
     }
   };
 
   const onFinalSave = async () => {
     if (!previewData) return;
     setUploading(true);
+    setParsingStatus('카카오 맵 API를 통해 좌표를 추출하고 주변 역을 찾는 중...');
+    
     try {
       await axios.post('/api/save', {
         announcement_title: previewData.title,
@@ -162,6 +171,7 @@ const App: React.FC = () => {
       setError('저장 중 오류가 발생했습니다.');
     } finally {
       setUploading(false);
+      setParsingStatus('');
     }
   };
 
@@ -364,9 +374,21 @@ const App: React.FC = () => {
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4 lg:p-12 animate-in fade-in zoom-in-95">
           <div className="bg-white w-full max-w-6xl h-full rounded-[3rem] shadow-2xl flex flex-col overflow-hidden">
             <div className="p-8 border-b border-slate-100 flex items-center justify-between shrink-0">
-              <div>
-                <h2 className="text-2xl font-black text-slate-800 tracking-tight">Data Preview & Edit</h2>
-                <p className="text-sm text-slate-400 mt-1">저장하기 전에 데이터를 확인하고 수정하세요. ({previewData.houses.length}건)</p>
+              <div className="flex items-center gap-4">
+                <div className={cn(
+                  "w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg",
+                  previewData.houses.length > 0 ? "bg-indigo-50 text-indigo-600" : "bg-amber-50 text-amber-600"
+                )}>
+                  {previewData.houses.length > 0 ? <FileText className="w-6 h-6" /> : <AlertCircle className="w-6 h-6" />}
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black text-slate-800 tracking-tight">Data Preview & Edit</h2>
+                  <p className="text-sm text-slate-400 mt-1 font-medium">
+                    {previewData.houses.length > 0 
+                      ? `저장하기 전에 데이터를 확인하고 수정하세요. 총 ${previewData.houses.length}건이 분석되었습니다.`
+                      : '분석된 주택 정보가 없습니다. 파일 내용을 확인하거나 예상 개수를 입력해 보세요.'}
+                  </p>
+                </div>
               </div>
               <div className="flex gap-3">
                 <button 
@@ -592,6 +614,22 @@ const App: React.FC = () => {
           {isCoffeeOpen ? <X className="w-6 h-6 text-white" /> : '☕'}
         </button>
       </div>
+
+      {/* 6. Global Loading Overlay */}
+      {uploading && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[200] flex flex-col items-center justify-center animate-in fade-in duration-300">
+          <div className="bg-white/80 p-12 rounded-[3.5rem] shadow-2xl flex flex-col items-center gap-6 border border-white/50 max-w-md w-full mx-4">
+            <div className="relative">
+              <div className="w-20 h-20 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
+              <Loader2 className="w-8 h-8 text-indigo-600 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
+            </div>
+            <div className="text-center space-y-2">
+              <h3 className="text-xl font-black text-slate-800 tracking-tight">Processing...</h3>
+              <p className="text-sm font-bold text-indigo-600 animate-pulse px-4">{parsingStatus || '잠시만 기다려주세요...'}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {
