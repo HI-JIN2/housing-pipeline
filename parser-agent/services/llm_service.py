@@ -17,7 +17,7 @@ class LLMService:
         
         self.mongo_service = MongoService()
 
-    async def parse_housing_data(self, text: str, api_key: str = None, expected_count: Optional[int] = None):
+    async def parse_housing_data(self, text: str, api_key: str = None, expected_count: Optional[int] = None, job_id: str = None):
         current_api_key = api_key or self.api_key
         if not current_api_key or current_api_key == "your_gemini_api_key_here":
             raise ValueError("Gemini API key is not set. Please provide it in the UI or .env file.")
@@ -27,25 +27,39 @@ class LLMService:
         
         text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
         
+        # Helper to update progress
+        async def update_status(count: int, step: str):
+            if job_id:
+                try:
+                    await self.mongo_service.db.job_status.update_one(
+                        {"job_id": job_id},
+                        {"$set": {"count": count, "step": step, "total": expected_count, "hash": text_hash}},
+                        upsert=True
+                    )
+                except:
+                    pass
+
         try:
             cached_data = await self.mongo_service.get_cache(text_hash)
             if cached_data:
                 print(f"Cache hit from MongoDB for hash {text_hash}")
+                await update_status(len(cached_data.get("houses", [])), "COMPLETED")
                 return cached_data
         except Exception as e:
             print(f"Error reading mongo cache: {e}")
 
-        # --- Micro-Chunking Implementation (Nuclear Fix) ---
-        # Extremely small chunks to prevent LLM from summarizing.
-        chunk_size = 2000
-        overlap = 1000
+        # --- Optimized Chunking for Rate Limits ---
+        # Larger chunks = fewer requests. 
+        # Gemini Flash supports 1M context, so 10k-20k is very safe and efficient for parsing.
+        chunk_size = 12000 
+        overlap = 2000
         chunks = []
         for i in range(0, len(text), chunk_size - overlap):
             chunks.append(text[i:i + chunk_size])
             if i + chunk_size >= len(text):
                 break
 
-        print(f"Total text length: {len(text)}. Micro-chunked into {len(chunks)} fragments.")
+        print(f"Total text length: {len(text)}. Chunked into {len(chunks)} fragments for rate-limit safety.")
         
         # --- Retry Loop for Expected Count ---
         max_retries = 2
@@ -53,12 +67,14 @@ class LLMService:
         final_houses = []
         final_title = ""
         
+        import asyncio
+
         while retry_count < max_retries:
             all_houses = []
             seen_keys = set()
             
             for idx, chunk_text in enumerate(chunks):
-                print(f"Processing Micro-chunk {idx+1}/{len(chunks)} (Attempt {retry_count+1})...")
+                print(f"Processing Chunk {idx+1}/{len(chunks)} (Attempt {retry_count+1})...")
                 
                 # Dynamic hint for retries
                 retry_hint = ""
@@ -75,7 +91,6 @@ class LLMService:
                 - DO NOT SUMMARIZE.
                 - DO NOT SKIP.
                 - DO NOT GENERALIZE.
-                - Extract even if the item is partial (the overlap will catch it).
                 - Return ONLY a valid JSON object.
 
                 [JSON SCHEMA]
@@ -97,29 +112,42 @@ class LLMService:
                 {chunk_text}
                 """
                 
-                try:
-                    response = await self.model.generate_content_async(
-                        contents=prompt,
-                        generation_config=genai.GenerationConfig(
-                            response_mime_type="application/json",
-                            temperature=0.2 if retry_count > 0 else 0.0
+                # Rate-limit aware call with 429 handling
+                for call_retry in range(3):
+                    try:
+                        await update_status(len(all_houses), f"AI_ANALYZING_CHUNK_{idx+1}")
+                        response = await self.model.generate_content_async(
+                            contents=prompt,
+                            generation_config=genai.GenerationConfig(
+                                response_mime_type="application/json",
+                                temperature=0.2 if retry_count > 0 else 0.0
+                            )
                         )
-                    )
-                    
-                    parsed = json.loads(response.text)
-                    houses = parsed.get("houses", [])
-                    
-                    for h in houses:
-                        h_key = f"{h.get('name')}-{h.get('address')}-{h.get('house_type')}-{h.get('deposit')}"
-                        if h_key not in seen_keys:
-                            all_houses.append(h)
-                            seen_keys.add(h_key)
-                    
-                    if not final_title: final_title = parsed.get("announcement_title", "")
                         
-                except Exception as e:
-                    print(f"Error in Micro-chunk {idx+1}: {e}")
-                    continue
+                        parsed = json.loads(response.text)
+                        houses = parsed.get("houses", [])
+                        
+                        for h in houses:
+                            h_key = f"{h.get('name')}-{h.get('address')}-{h.get('house_type')}-{h.get('deposit')}"
+                            if h_key not in seen_keys:
+                                all_houses.append(h)
+                                seen_keys.add(h_key)
+                        
+                        if not final_title: final_title = parsed.get("announcement_title", "")
+                        
+                        # Success - wait a bit to prevent 429 on next chunk
+                        await asyncio.sleep(4) 
+                        break
+
+                    except Exception as e:
+                        if "429" in str(e):
+                            wait_time = 45 + (call_retry * 20)
+                            print(f"Rate limited (429). Waiting {wait_time}s...")
+                            await asyncio.sleep(wait_time)
+                            continue
+                        else:
+                            print(f"Error in Chunk {idx+1}: {e}")
+                            break
 
             final_houses = all_houses
             
@@ -127,6 +155,7 @@ class LLMService:
             if expected_count and len(final_houses) < (expected_count * 0.95):
                 retry_count += 1
                 print(f"Count mismatch: Got {len(final_houses)}, Expected {expected_count}. Retrying ({retry_count}/{max_retries})...")
+                await asyncio.sleep(10) # Cooldown between global retries
             else:
                 break
 
@@ -149,6 +178,7 @@ class LLMService:
         # Save to MongoDB cache
         try:
             await self.mongo_service.save_cache(text_hash, final_result)
+            await update_status(len(valid_houses), "COMPLETED")
             print(f"FINAL RESULT: {len(valid_houses)} items stored.")
         except Exception as e:
             print(f"Cache write error: {e}")

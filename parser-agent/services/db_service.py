@@ -9,15 +9,25 @@ class DBService:
 
     async def init_pool(self):
         import asyncio
+        # Try both 127.0.0.1 and localhost for robustness on Mac/Developer environments
+        dsns_to_try = [self.dsn]
+        if "127.0.0.1" in self.dsn:
+            dsns_to_try.append(self.dsn.replace("127.0.0.1", "localhost"))
+        elif "localhost" in self.dsn:
+            dsns_to_try.append(self.dsn.replace("localhost", "127.0.0.1"))
+
         for i in range(10):
-            try:
-                self.pool = await asyncpg.create_pool(self.dsn)
-                print("Database (Postgres) connected gracefully in Parser Agent")
-                return
-            except Exception as e:
-                print(f"Waiting for Postgres to initialize... ({i+1}/10) - {e}")
-                await asyncio.sleep(2)
-        raise Exception("Could not connect to Database after 10 retries.")
+            for dsn in dsns_to_try:
+                try:
+                    self.pool = await asyncpg.create_pool(dsn)
+                    print(f"Database (Postgres) connected gracefully in Parser Agent using {dsn}")
+                    return
+                except Exception:
+                    continue
+            
+            print(f"Waiting for Postgres to initialize... ({i+1}/10)")
+            await asyncio.sleep(2)
+        raise Exception(f"Could not connect to Database after 10 retries. Tried: {dsns_to_try}")
 
     async def close_pool(self):
         if self.pool:

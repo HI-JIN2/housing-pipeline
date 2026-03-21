@@ -1,12 +1,12 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from typing import Optional
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Header, BackgroundTasks
+from typing import Optional, List
 import httpx
+import asyncio
 from services.pdf_service import PDFService
 from services.excel_service import ExcelService
 from services.llm_service import LLMService
 from services.mongo_service import MongoService
 import uuid
-import sys
 import os
 
 router = APIRouter()
@@ -62,54 +62,54 @@ async def get_announcement_details(announcement_id: str):
     return {"status": "success", "data": results}
 
 @router.post("/upload")
-async def upload_file(
-    files: list[UploadFile] = File(...), 
+async def upload_files(
+    background_tasks: BackgroundTasks,
+    files: List[UploadFile] = File(...),
+    expected_count: Optional[int] = Form(None),
     gemini_key: Optional[str] = Form(None),
-    expected_count: Optional[int] = Form(None)
+    x_job_id: Optional[str] = Header(None)
 ):
     if len(files) > 3:
         raise HTTPException(status_code=400, detail="Maximum 3 files allowed")
 
     try:
-        all_houses = []
-        announcement_title = None
-        announcement_desc = None
-        
+        all_text = ""
         for file in files:
-            filename = file.filename.lower()
-            file_bytes = await file.read()
-            
-            if filename.endswith('.pdf'):
-                extracted_text = PDFService.extract_text(file_bytes)
-            elif filename.endswith('.xlsx'):
-                extracted_text = ExcelService.extract_text(file_bytes)
-            else:
-                continue
-                
-            if not extracted_text.strip():
-                continue
-                
-            parsed_result = await llm_service.parse_housing_data(
-                extracted_text, 
-                api_key=gemini_key, 
-                expected_count=expected_count
-            )
-            if parsed_result:
-                houses = parsed_result.get("houses", [])
-                all_houses.extend(houses)
-                if not announcement_title:
-                    announcement_title = parsed_result.get("announcement_title")
-                if not announcement_desc:
-                    announcement_desc = parsed_result.get("announcement_description")
+            content = await file.read()
+            if file.filename.lower().endswith('.pdf'):
+                all_text += PDFService.extract_text(content)
+            elif file.filename.lower().endswith(('.xlsx', '.xls')):
+                all_text += ExcelService.extract_text(content)
+        
+        # Parse data with LLM
+        # We pass job_id (from header) for real-time progress tracking
+        result = await llm_service.parse_housing_data(
+            all_text, 
+            api_key=gemini_key, 
+            expected_count=expected_count,
+            job_id=x_job_id
+        )
+        
+        return result
+    except Exception as e:
+        print(f"Upload error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/status/{job_id}")
+async def get_job_status(job_id: str):
+    try:
+        # Check job_status collection in MongoDB
+        status = await mongo_service.db.job_status.find_one({"job_id": job_id})
+        if not status:
+            return {"count": 0, "step": "PENDING", "total": 0}
+        
         return {
-            "status": "success",
-            "announcement_title": announcement_title or "Untitled Announcement",
-            "announcement_description": announcement_desc,
-            "houses": all_houses
+            "count": status.get("count", 0),
+            "step": status.get("step", ""),
+            "total": status.get("total", 0)
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"count": 0, "step": "ERROR", "detail": str(e)}
 
 @router.post("/save")
 async def save_announcement(data: dict):

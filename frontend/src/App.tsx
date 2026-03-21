@@ -58,6 +58,8 @@ const App: React.FC = () => {
   const [isCoffeeOpen, setIsCoffeeOpen] = useState(false);
   const [parsingStatus, setParsingStatus] = useState<string>('');
   const [currentStep, setCurrentStep] = useState<number>(0);
+  const [progressCount, setProgressCount] = useState<number>(0);
+  const [progressTotal, setProgressTotal] = useState<number>(0);
 
   useEffect(() => {
     fetchAnnouncements();
@@ -124,6 +126,21 @@ const App: React.FC = () => {
     setIsConfirmingUpload(false);
     setParsingStatus('문서에서 텍스트를 추출하는 중...');
     setCurrentStep(1);
+    setProgressCount(0);
+    setProgressTotal(expectedCount || 0);
+
+    const jobId = Math.random().toString(36).substring(7);
+    
+    // Polling Progress
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await axios.get(`/api/status/${jobId}`);
+        if (res.data.count > 0) setProgressCount(res.data.count);
+        if (res.data.total > 0) setProgressTotal(res.data.total);
+      } catch (e) {
+        console.error("Status poll error", e);
+      }
+    }, 3000);
     
     const formData = new FormData();
     Array.from(pendingFiles).forEach(file => {
@@ -142,12 +159,15 @@ const App: React.FC = () => {
 
       setTimeout(() => {
         if (expectedCount) {
-          setParsingStatus(`데이터 개수 검증 중 (예상: ${expectedCount}건)...`);
+          setParsingStatus(`데이터 개수 검증 및 재시도 판단 중...`);
           setCurrentStep(2);
         }
-      }, 5000);
+      }, 10000);
       
-      const res = await axios.post('/api/upload', formData);
+      const res = await axios.post('/api/upload', formData, {
+        headers: { 'x-job-id': jobId }
+      });
+      
       setPreviewData({
         title: res.data.announcement_title,
         desc: res.data.announcement_description,
@@ -155,12 +175,15 @@ const App: React.FC = () => {
       });
       setIsDrawerOpen(false);
     } catch (err) {
-      setError('분석 중 오류가 발생했습니다.');
+      setError('분석 중 오류가 발생했습니다. (API 할당량 초과일 수 있습니다)');
     } finally {
+      clearInterval(pollInterval);
       setUploading(false);
       setPendingFiles(null);
       setParsingStatus('');
       setCurrentStep(0);
+      setProgressCount(0);
+      setProgressTotal(0);
     }
   };
 
@@ -684,8 +707,18 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            <div className="text-center space-y-2">
-              <p className="text-sm font-bold text-indigo-600 animate-pulse px-4 bg-indigo-50/50 py-2 rounded-2xl border border-indigo-100/50">
+            <div className="text-center space-y-4">
+              {progressTotal > 0 && (
+                <div className="flex flex-col items-center gap-1 animate-in slide-in-from-bottom-2 duration-500">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-4xl font-black text-indigo-600 tracking-tighter">{progressCount}</span>
+                    <span className="text-slate-300 font-bold">/</span>
+                    <span className="text-xl font-bold text-slate-400">{progressTotal}</span>
+                  </div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">건 추출 완료</span>
+                </div>
+              )}
+              <p className="text-sm font-bold text-indigo-600 animate-pulse px-4 bg-indigo-50/50 py-2 rounded-2xl border border-indigo-100/50 min-w-[280px]">
                 {parsingStatus || '잠시만 기다려주세요...'}
               </p>
             </div>
