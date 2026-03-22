@@ -182,8 +182,14 @@ async def save_announcement(data: dict, x_admin_password: Optional[str] = Header
 
     # 2. Sync to Geo Agent (Postgres)
     # First, delete existing data for this title to avoid duplicates
+    from urllib.parse import quote
     async with httpx.AsyncClient() as client:
-        await client.delete(f"{os.path.dirname(GEO_AGENT_URL)}/housing/{announcement_title}")
+        # Construct base URL carefully
+        base_url = GEO_AGENT_URL.rsplit('/', 1)[0]
+        try:
+            await client.delete(f"{base_url}/housing/{quote(announcement_title)}", timeout=10.0)
+        except Exception as e:
+            print(f"Initial Postgres cleanup failed for title '{announcement_title}': {e}")
         
         tasks = []
         for house in houses:
@@ -202,8 +208,16 @@ async def delete_announcement(announcement_id: str, x_admin_password: Optional[s
     if doc:
         title = doc.get("announcement_title")
         if title:
+            from urllib.parse import quote
             async with httpx.AsyncClient() as client:
-                await client.delete(f"{os.path.dirname(GEO_AGENT_URL)}/housing/{title}")
+                # Construct base URL carefully: e.g., http://geo:8000/api/enrich -> http://geo:8000/api
+                base_url = GEO_AGENT_URL.rsplit('/', 1)[0]
+                try:
+                    target_url = f"{base_url}/housing/{quote(title)}"
+                    await client.delete(target_url, timeout=10.0)
+                except Exception as e:
+                    print(f"Postgres cleanup (Geo Agent) failed for title '{title}': {e}")
+                    # Continue to delete from Mongo even if Geo Agent cleanup fails
     
     # 2. Delete from Mongo
     success = await mongo_service.delete_announcement(announcement_id)
