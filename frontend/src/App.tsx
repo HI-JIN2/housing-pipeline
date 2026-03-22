@@ -986,9 +986,9 @@ const App: React.FC = () => {
               className="group hover:scale-105 transition-transform"
             >
               <picture>
-                <source media="(max-width: 640px)" srcSet="http://localhost:8000/static/images/btn_send_small.png" />
+                <source media="(max-width: 640px)" srcSet="/static/images/btn_send_small.png" />
                 <img 
-                  src="http://localhost:8000/static/images/btn_send_regular.png" 
+                  src="/static/images/btn_send_regular.png" 
                   alt="카카오페이" 
                   className="h-10 block filter drop-shadow-[0_4px_6px_rgba(0,0,0,0.2)] rounded-xl"
                   onError={(e) => (e.currentTarget.style.display = 'none')}
