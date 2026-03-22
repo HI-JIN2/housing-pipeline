@@ -44,8 +44,24 @@ async def enrich_data(data: dict):
 @app.get("/api/geocode")
 async def geocode_address(address: str):
     try:
+        # 1. Geocoding
         lat, lng = await kakao_client.get_coordinates(address)
-        return {"lat": lat, "lng": lng}
+        if not lat or not lng:
+            return {"lat": None, "lng": None}
+            
+        # 2. Nearest Station (using existing service logic)
+        station_name, distance_meters = await db_service.find_nearest_station(lat, lng)
+        
+        # 3. Walking time approx
+        walking_time_mins = int((distance_meters * 1.3) / 72) if station_name else 0
+        
+        return {
+            "lat": lat, 
+            "lng": lng,
+            "nearest_station": station_name or "알수없음",
+            "distance_meters": distance_meters or 0,
+            "walking_time_mins": walking_time_mins
+        }
     except Exception as e:
         print(f"Geocoding failed for address '{address}': {e}")
         raise HTTPException(status_code=502, detail=f"Geo Agent Error: {str(e)}")

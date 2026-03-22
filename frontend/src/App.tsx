@@ -117,7 +117,10 @@ const App: React.FC = () => {
             houses[idx] = { 
               ...houses[idx], 
               lat: res.data.lat, 
-              lng: res.data.lng 
+              lng: res.data.lng,
+              nearest_station: res.data.nearest_station,
+              distance_meters: res.data.distance_meters,
+              walking_time_mins: res.data.walking_time_mins
             };
           }
         } catch (e) {
@@ -676,14 +679,15 @@ const App: React.FC = () => {
                 <thead>
                   <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center border-b border-slate-100">
                     <th className="pb-4 pl-4 text-left">#</th>
+                    <th className="pb-4 text-left w-16">자치구</th>
+                    <th className="pb-4 text-left w-20">단지번호</th>
                     <th className="pb-4 text-left">주소</th>
-                    <th className="pb-4 text-left">자치구</th>
-                    <th className="pb-4 text-left">단지번호</th>
                     <th className="pb-4">호수</th>
                     <th className="pb-4">면적</th>
                     <th className="pb-4">유형</th>
                     <th className="pb-4">승강기</th>
-                    <th className="pb-4">GEO</th>
+                    <th className="pb-4">위도/경도</th>
+                    <th className="pb-4">인근역/거리</th>
                     <th className="pb-4">보증금(만)</th>
                     <th className="pb-4 pr-4">월세(만)</th>
                   </tr>
@@ -705,18 +709,7 @@ const App: React.FC = () => {
                       </td>
                       <td className="py-3">
                         <input 
-                          className="bg-transparent border-none text-[10px] text-slate-500 w-full text-left outline-none italic font-medium"
-                          value={h.address}
-                          onChange={(e) => {
-                            const newHouses = [...previewData.houses];
-                            newHouses[i].address = e.target.value;
-                            setPreviewData({...previewData, houses: newHouses});
-                          }}
-                        />
-                      </td>
-                      <td className="py-3">
-                        <input 
-                          className="bg-transparent border-none text-[10px] font-medium text-slate-600 focus:ring-1 focus:ring-indigo-300 rounded px-1 w-full outline-none"
+                          className="bg-transparent border-none text-[10px] font-medium text-slate-600 focus:ring-1 focus:ring-indigo-300 rounded px-1 w-16 outline-none"
                           value={h.district || ''}
                           onChange={(e) => {
                             const newHouses = [...previewData.houses];
@@ -727,11 +720,22 @@ const App: React.FC = () => {
                       </td>
                       <td className="py-3">
                         <input 
-                          className="bg-transparent border-none text-[10px] text-slate-400 focus:ring-1 focus:ring-indigo-300 rounded px-1 w-full outline-none"
+                          className="bg-transparent border-none text-[10px] text-slate-400 focus:ring-1 focus:ring-indigo-300 rounded px-1 w-20 outline-none"
                           value={h.complex_no || ''}
                           onChange={(e) => {
                             const newHouses = [...previewData.houses];
                             newHouses[i].complex_no = e.target.value;
+                            setPreviewData({...previewData, houses: newHouses});
+                          }}
+                        />
+                      </td>
+                      <td className="py-3">
+                        <input 
+                          className="bg-transparent border-none text-[10px] text-slate-500 w-full text-left outline-none italic font-medium"
+                          value={h.address}
+                          onChange={(e) => {
+                            const newHouses = [...previewData.houses];
+                            newHouses[i].address = e.target.value;
                             setPreviewData({...previewData, houses: newHouses});
                           }}
                         />
@@ -783,14 +787,23 @@ const App: React.FC = () => {
                         />
                       </td>
                       <td className="py-3 text-center">
-                        <div className="flex justify-center">
+                        <div className="flex flex-col items-center gap-0.5">
                           {geocodingIndices.has(i) ? (
                             <Loader2 className="w-3 h-3 animate-spin text-slate-300" />
                           ) : h.lat && h.lng ? (
-                            <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-200" title={`Lat: ${h.lat}, Lng: ${h.lng}`} />
+                            <>
+                              <div className="text-[8px] font-mono text-slate-400">{h.lat?.toFixed(5)}</div>
+                              <div className="text-[8px] font-mono text-slate-400">{h.lng?.toFixed(5)}</div>
+                            </>
                           ) : (
-                            <div className="w-2 h-2 rounded-full bg-slate-200" title="좌표 없음" />
+                            <div className="w-2 h-2 rounded-full bg-slate-200" />
                           )}
+                        </div>
+                      </td>
+                      <td className="py-3 text-center">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="text-[9px] font-black text-emerald-600 truncate max-w-[60px]">{h.nearest_station || '-'}</span>
+                          <span className="text-[8px] text-slate-400 font-bold">{h.distance_meters ? `${h.distance_meters}m` : ''}</span>
                         </div>
                       </td>
                       <td className="py-3 text-center">
