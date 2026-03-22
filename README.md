@@ -10,8 +10,9 @@ English version is available at [README_EN.md](./README_EN.md).
 
 - **스마트 문서 파싱**: PDF 및 엑셀 공고문에서 주택명, 공급호수, 주소, 임대료 등을 LLM(Gemini)을 활용해 파싱 및 구조화합니다.
 - **다이나믹 스키마 지원**: nosql를 활용해 공고문마다 다른 상세 정보(주차대수, 승강기여부, 방개수 등)를 빠짐없이 추출하여 '더보기' 섹션에 표시합니다.
-- **GEO 데이터 보강**: 추출된 주소의 좌표를 식별하고, PostGIS를 통해 인근 지하철역명 및 실제 도보 거리를 계산합니다.
+- **GEO 데이터 보강**: 추출된 주소의 좌표를 식별하고, PostGIS를 통해 인근 지하철역명 및 실제 도보 거리를 계산합니다. (데이터 프리뷰 단계에서 즉시 시각화)
 - **유연한 API 키 관리**: `.env`에 Gemini 키가 설정되어 있지 않아도, 웹 UI에서 직접 입력하고 브라우저(`localStorage`)에 저장하여 사용할 수 있습니다.
+- **관리자 보안**: 공고 업로드 및 삭제 시 `ADMIN_PASSWORD`를 통한 인증을 거쳐 데이터 무결성을 보호합니다.
 - **경량 아키텍처**: HTTP 기반의 2-Agent 구조를 채택하여 저사양 서버(Oracle Cloud Free Tier 등)에서도 원활하게 구동됩니다.
 - **배포 자동화**: Terraform과 GitHub Actions를 통해 Oracle Cloud ARM 인스턴스에 원클릭으로 배포할 수 있습니다.
 
@@ -47,6 +48,9 @@ KAKAO_REST_API_KEY="발급받은_카카오_키"
 # 데이터베이스 연결 정보
 POSTGRES_DSN="postgresql://housing_user:housing_password@127.0.0.1:5433/housing_db"
 MONGO_URL="mongodb://127.0.0.1:27017"
+
+# 관리자 설정
+ADMIN_PASSWORD="보안을_위한_관리자_비밀번호"
 ```
 
 ### 3. 실행 방법

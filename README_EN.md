@@ -8,8 +8,9 @@ An intelligent data pipeline that automatically extracts key information from re
 
 - **Smart Document Parsing**: Instantly structures information such as housing name, units, address, and rent using LLM (Gemini).
 - **Dynamic Schema Support**: Captures all available metadata (e.g., parking, elevators, rooms) and displays them in an expandable "More Info" UI.
-- **Geo-Enrichment**: Identifies coordinates and calculates the nearest subway station names and actual walking distances via PostGIS.
+- **Geo-Enrichment**: Identifies coordinates and calculates nearest subway stations/distances via PostGIS. Results are visualized instantly during the **Data Preview** stage.
 - **Flexible API Key Management**: Allows users to enter Gemini API keys directly in the web UI and persists them in `localStorage`.
+- **Admin Security**: Protects data integrity by requiring an `ADMIN_PASSWORD` for announcement uploads and deletions.
 - **Lightweight Architecture**: HTTP-based 2-Agent structure optimized for low-specification servers like Oracle Cloud Always Free.
 - **Automated Deployment**: One-click deployment to Oracle Cloud ARM instances using Terraform and GitHub Actions.
 
@@ -45,6 +46,9 @@ KAKAO_REST_API_KEY="your_kakao_key"
 # Database Connections
 POSTGRES_DSN="postgresql://housing_user:housing_password@127.0.0.1:5433/housing_db"
 MONGO_URL="mongodb://127.0.0.1:27017"
+
+# Admin Security
+ADMIN_PASSWORD="your_secure_admin_password"
 ```
 
 ### 3. Execution
