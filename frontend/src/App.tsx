@@ -103,7 +103,9 @@ const App: React.FC = () => {
     
     if (indicesToProcess.length === 0) return;
 
-    const batchSize = 5;
+    const batchSize = 3; // Reduced batch size for stability
+    const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
     for (let i = 0; i < indicesToProcess.length; i += batchSize) {
       const batch = indicesToProcess.slice(i, i + batchSize);
       setGeocodingIndices(prev => new Set([...prev, ...batch]));
@@ -128,7 +130,12 @@ const App: React.FC = () => {
           });
         }
       }));
-      setPreviewData({ ...previewData, houses: [...houses] });
+      
+      // Update preview data once per batch
+      setPreviewData(prev => prev ? { ...prev, houses: [...houses] } : null);
+      
+      // Give the UI thread a break between batches
+      await delay(300);
     }
   };
   const fetchAnnouncements = async () => {
@@ -187,6 +194,7 @@ const App: React.FC = () => {
     
     setUploading(true);
     setActiveProvider(selectedProvider);
+    setActiveModel(selectedModel);
     setIsConfirmingUpload(false);
     setParsingStatus('문서에서 텍스트를 추출하는 중...');
     setCurrentStep(1);
@@ -317,6 +325,11 @@ const App: React.FC = () => {
   const updateProvider = (p: 'gemini' | 'openai') => {
     setSelectedProvider(p);
     localStorage.setItem('llm_provider', p);
+    
+    // Reset model to default for the provider to avoid "Gemini | gpt-4o" style mismatch
+    const defaultModel = p === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o';
+    setSelectedModel(defaultModel);
+    localStorage.setItem('llm_model', defaultModel);
   };
 
   const updateModel = (m: string) => {
@@ -436,13 +449,18 @@ const App: React.FC = () => {
                     : "bg-white border-slate-100 hover:border-indigo-100 hover:shadow-lg"
                 )}
               >
-                <div className="flex justify-between items-start mb-2">
-                  <h3 className={cn(
-                    "font-bold text-slate-800 transition-colors leading-tight pr-4",
-                    selectedHouseId === house.id ? "text-indigo-700" : "group-hover:text-indigo-600"
-                  )}>{house.address.split(' ').slice(0, 3).join(' ')}</h3>
+                  <div className="flex-1 min-w-0 pr-4">
+                    <h3 className={cn(
+                      "font-bold text-slate-800 transition-colors leading-tight truncate",
+                      selectedHouseId === house.id ? "text-indigo-700" : "group-hover:text-indigo-600"
+                    )}>{house.address.split(' ').slice(0, 3).join(' ')}</h3>
+                    {house.unit_no && (
+                      <span className="text-[10px] font-bold text-slate-400 bg-slate-100/50 px-1.5 py-0.5 rounded-md mt-1 inline-block">
+                        {house.unit_no}
+                      </span>
+                    )}
+                  </div>
                   <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full text-[9px] font-black shrink-0">{house.house_type}</span>
-                </div>
                 
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
@@ -454,7 +472,7 @@ const App: React.FC = () => {
                           <span className="text-[9px] font-black px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded flex items-center gap-0.5">
                             <Layers className="w-2.5 h-2.5" /> {house.nearest_station}역
                           </span>
-                          <span className="text-[10px] text-slate-400 font-medium">도보 {house.walking_time_mins}분</span>
+                          <span className="text-[10px] text-slate-400 font-medium">도보 {house.walking_time_mins}분 ({house.distance_meters}m)</span>
                         </div>
                       )}
                     </div>

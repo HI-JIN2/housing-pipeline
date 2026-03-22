@@ -20,6 +20,7 @@ interface HouseLocation {
   deposit?: number;
   monthly_rent?: number;
   nearest_station?: string;
+  distance_meters?: number;
   walking_time_mins?: number;
 }
 
@@ -98,7 +99,7 @@ const KakaoMapView: React.FC<MapProps> = ({ houses, selectedHouseId }) => {
         const depositStr = house.deposit ? `${house.deposit.toLocaleString()}만원` : '-';
         const rentStr = house.monthly_rent !== undefined ? `${house.monthly_rent.toLocaleString()}만원` : '-';
         const transportInfo = house.nearest_station 
-          ? `<p style="margin:8px 0 0; font-size:11px; color:#10b981; font-weight:bold;">🚉 ${house.nearest_station}역 (도보 ${house.walking_time_mins || '?'}분)</p>`
+          ? `<p style="margin:8px 0 0; font-size:11px; color:#10b981; font-weight:bold;">🚉 ${house.nearest_station}역 (도보 ${house.walking_time_mins || '?'}분 ${house.distance_meters ? `· ${house.distance_meters}m` : ''})</p>`
           : '';
 
         const iwContent = `
@@ -126,10 +127,8 @@ const KakaoMapView: React.FC<MapProps> = ({ houses, selectedHouseId }) => {
               </div>
             </div>
 
-            <p style="margin:0; font-size:11px; color:#94a3b8; line-height:1.4;">📍 ${house.address}</p>
+            <p style="margin:0; font-size:11px; color:#94a3b8; line-height:1.5; display: flex; align-items: start; gap: 4px;"><span>📍</span> <span>${house.address}</span></p>
             ${transportInfo}
-            
-            <p style="margin:10px 0 0; font-size:10px; color:#94a3b8; line-height:1.4; border-top:1px solid #f1f5f9; pt:8px;">📍 ${house.address}</p>
           </div>
         `;
         const infowindow = new window.kakao.maps.InfoWindow({
