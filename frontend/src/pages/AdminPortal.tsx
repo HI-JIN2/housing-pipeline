@@ -19,6 +19,8 @@ const AdminPortal: React.FC = () => {
   const [isConfirmingUpload, setIsConfirmingUpload] = useState(false);
   const [userApiKey, setUserApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
   const [parsingStatus, setParsingStatus] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 50;
 
   const fetchAnnouncements = useCallback(async () => {
     try {
@@ -210,7 +212,7 @@ const AdminPortal: React.FC = () => {
 
       {/* Preview Overlay */}
       {previewData && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-8 animate-in zoom-in-95">
+        <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-8 animate-in fade-in duration-300">
            <div className="bg-white w-full max-w-7xl h-full rounded-[3.5rem] shadow-4xl flex flex-col overflow-hidden">
               <div className="p-10 border-b border-slate-100 flex items-center justify-between">
                  <div>
@@ -222,7 +224,7 @@ const AdminPortal: React.FC = () => {
                     <button onClick={onFinalSave} className="px-10 py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl hover:bg-indigo-700">최종 저장</button>
                  </div>
               </div>
-              <div className="flex-1 overflow-auto p-10">
+              <div className="flex-1 overflow-auto p-10 custom-scrollbar">
                  <table className="w-full text-left border-separate border-spacing-y-2">
                     <thead>
                        <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
@@ -233,7 +235,9 @@ const AdminPortal: React.FC = () => {
                        </tr>
                     </thead>
                     <tbody className="space-y-2">
-                       {previewData.houses.map((h, i) => (
+                       {previewData.houses
+                         .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                         .map((h, i) => (
                          <tr key={i} className="bg-slate-50 hover:bg-indigo-50 transition-colors">
                             <td className="pl-4 py-4 rounded-l-2xl text-sm font-bold text-slate-700">{h.address}</td>
                             <td className="py-4 text-xs font-black text-amber-600 uppercase">{h.house_type}</td>
@@ -243,6 +247,29 @@ const AdminPortal: React.FC = () => {
                        ))}
                     </tbody>
                  </table>
+              </div>
+              
+              {/* Pagination Controls */}
+              <div className="p-6 bg-slate-50 border-t border-slate-100 flex items-center justify-between shrink-0">
+                 <div className="text-sm font-bold text-slate-400">
+                    Page {currentPage} of {Math.ceil(previewData.houses.length / pageSize)}
+                 </div>
+                 <div className="flex gap-2">
+                    <button 
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                      className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    <button 
+                      onClick={() => setCurrentPage(prev => Math.min(Math.ceil(previewData.houses.length / pageSize), prev + 1))}
+                      disabled={currentPage >= Math.ceil(previewData.houses.length / pageSize)}
+                      className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                 </div>
               </div>
            </div>
         </div>
