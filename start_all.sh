@@ -8,10 +8,12 @@ cleanup() {
     echo "======================================"
     echo "1/2 끄는 중... [FastAPI & React 에이전트 서버들]"
     kill $PARSER_PID 2>/dev/null
+    kill $ADMIN_PID 2>/dev/null
     kill $GEO_PID 2>/dev/null
     kill $FRONTEND_PID 2>/dev/null
     pkill -f "uvicorn main:app" 2>/dev/null
     lsof -i :8000 -t | xargs kill -9 2>/dev/null
+    lsof -i :8002 -t | xargs kill -9 2>/dev/null
     lsof -i :8001 -t | xargs kill -9 2>/dev/null
     lsof -i :5173 -t | xargs kill -9 2>/dev/null
     
@@ -31,20 +33,28 @@ echo "======================================"
 
 echo "🧹 이전 좀비 프로세스 정리 중..."
 lsof -i :8000 -t | xargs kill -9 > /dev/null 2>&1 || true
+lsof -i :8002 -t | xargs kill -9 > /dev/null 2>&1 || true
 lsof -i :8001 -t | xargs kill -9 > /dev/null 2>&1 || true
 lsof -i :5173 -t | xargs kill -9 > /dev/null 2>&1 || true
 
 echo "[1/4] Docker Compose 인프라 (MongoDB, PostGIS) 시작 중..."
 docker-compose up -d
 
-echo "[2/4] Parser Agent (업로드 UI 및 파서) 포트 8000 실행 중..."
+echo "[2/5] Parser Agent (사용자 조회 API) 포트 8000 실행 중..."
 cd parser-agent
 pip3 install -r requirements.txt > /dev/null 2>&1
 python3 -m uvicorn main:app --reload --port 8000 &
 PARSER_PID=$!
 cd ..
 
-echo "[3/4] Geo Agent (위치 정보/길찾기) 포트 8001 실행 중..."
+echo "[3/5] Admin Agent (업로드 및 관리 API) 포트 8002 실행 중..."
+cd admin-agent
+pip3 install -r requirements.txt > /dev/null 2>&1
+python3 -m uvicorn main:app --reload --port 8002 &
+ADMIN_PID=$!
+cd ..
+
+echo "[4/5] Geo Agent (위치 정보/길찾기) 포트 8001 실행 중..."
 cd geo-agent
 pip3 install -r requirements.txt > /dev/null 2>&1
 echo "    -> 파싱된 역 좌표 정보를 바탕으로 DB를 초기화합니다..."
@@ -53,7 +63,7 @@ python3 -m uvicorn main:app --reload --port 8001 &
 GEO_PID=$!
 cd ..
 
-echo "[4/4] Frontend (React) 포트 5173 실행 중..."
+echo "[5/5] Frontend (React) 포트 5173 실행 중..."
 cd frontend
 npm install > /dev/null 2>&1
 npm run dev &

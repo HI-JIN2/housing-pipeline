@@ -72,6 +72,23 @@ services:
         limits:
           memory: 128M
 
+  admin-agent:
+    image: ${DOCKERHUB_USERNAME}/housing-admin:latest
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017
+      - POSTGRES_DSN=postgresql://housing_user:housing_password@postgres:5432/housing_db
+      - GEO_AGENT_URL=http://geo-agent:8000/api/enrich
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    depends_on:
+      - mongodb
+      - postgres
+    networks:
+      - housing-network
+
   prometheus:
     image: prom/prometheus:latest
     restart: always
