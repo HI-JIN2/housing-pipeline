@@ -39,19 +39,16 @@ English version is available at [README_EN.md](./README_EN.md).
 - Google Gemini API Key 및 카카오 REST API Key
 
 ### 2. 환경 설정 (.env)
-프로젝트 루트 디렉토리에 `.env` 파일을 생성합니다. (Gemini 키는 웹 UI에서 직접 입력할 수도 있습니다.)
-```env
-# API Key 설정
-GEMINI_API_KEY="발급받은_Gemini_키 (선택)"
-KAKAO_REST_API_KEY="발급받은_카카오_키"
+프로젝트 루트 디렉토리에 `.env` 파일을 생성합니다.
 
-# 데이터베이스 연결 정보
-POSTGRES_DSN="postgresql://housing_user:housing_password@127.0.0.1:5433/housing_db"
-MONGO_URL="mongodb://127.0.0.1:27017"
-
-# 관리자 설정
-ADMIN_PASSWORD="보안을_위한_관리자_비밀번호"
-```
+| 변수명 | 필수 여부 | 설명 |
+| :--- | :---: | :--- |
+| `KAKAO_REST_API_KEY` | **필수** | 지오코딩 및 지하철역 검색용 카카오 로컬 API 키 |
+| `ADMIN_PASSWORD` | **필수** | 관리자 인증용 비밀번호 |
+| `GEMINI_API_KEY` | 선택 | Gemini API 키 (미설정 시 UI에서 입력 가능) |
+| `GRAFANA_PASSWORD` | 선택 | Grafana 관리자 비밀번호 (기본값: `admin`) |
+| `POSTGRES_DSN` | 선택 | 선택 시 직접 설정 (기본값 제공됨) |
+| `MONGO_URL` | 선택 | 선택 시 직접 설정 (기본값 제공됨) |
 
 ### 3. 실행 방법
 ```bash
@@ -65,9 +62,22 @@ chmod +x start_all.sh
 ## 클라우드 배포
 
 Oracle Cloud Infrastructure (OCI) Always Free 티어 배포를 위해 다음을 이용하세요:
-- **Terraform**: `terraform/` 디렉토리의 코드를 통해 인프라를 구축합니다.
+- **Terraform**: `terraform/` 디렉토리 코드를 통해 인프라를 구축합니다.
 - **CI/CD**: `.github/workflows/deploy.yml`을 통해 자동 배포를 수행합니다.
-- **필요 시크릿**: `OCI_HOST`, `OCI_SSH_KEY`, `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`을 GitHub Secrets에 등록하십시오.
+- **필요 시크릿 (GitHub Secrets)**:
+  - 인프라: `OCI_HOST`, `OCI_SSH_KEY`, `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`
+  - 앱 설정: `KAKAO_REST_API_KEY`, `ADMIN_PASSWORD`, `KAKAO_JS_KEY`
+  - 모니터링: `GRAFANA_PASSWORD` (선택)
+
+---
+
+## 모니터링 및 메트릭
+
+저사양 VM(1GB RAM) 환경에서도 안정적으로 구동되는 모니터링 시스템을 포함하고 있습니다.
+- **Prometheus (9090)**: 에이전트들의 실시간 상태 및 메트릭 수집
+- **Grafana (3000)**: 수집된 데이터 시각화 (기본 계정: `admin` / `admin`)
+- **OCI Monitoring**: 클라우드 네이티브 메트릭 연동 (Terraform으로 활성화)
+- **최적화**: Docker 리소스 제한(128MB) 및 수집 주기(30s) 조정을 통해 OOM 방지
 
 ---
 
