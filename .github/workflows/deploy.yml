@@ -95,6 +95,8 @@ jobs:
             sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT || true
             sudo iptables -I INPUT -p tcp --dport 8000 -j ACCEPT || true
             sudo iptables -I INPUT -p tcp --dport 5173 -j ACCEPT || true
+            sudo iptables -I INPUT -p tcp --dport 3000 -j ACCEPT || true
+            sudo iptables -I INPUT -p tcp --dport 9090 -j ACCEPT || true
             
             # Ensure Docker and Docker Compose V2 are installed
             if ! command -v docker > /dev/null 2>&1; then
