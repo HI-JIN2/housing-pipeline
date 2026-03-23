@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+scrape_configs:
+  - job_name: 'parser-agent'
+    static_configs:
+      - targets: ['parser-agent:8000']
+
+  - job_name: 'geo-agent'
+    static_configs:
+      - targets: ['geo-agent:8001']
