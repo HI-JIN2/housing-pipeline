@@ -2,7 +2,7 @@ name: OCI Provisioning Retry
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # Every 30 minutes
+    - cron: '0 * * * *'  # Once per hour
   workflow_dispatch:        # Allow manual trigger
 
 jobs:
