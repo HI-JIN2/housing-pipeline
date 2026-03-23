@@ -88,6 +88,8 @@ services:
     depends_on:
       - mongodb
       - db
+    ports:
+      - "8002:8002"
 
   prometheus:
     image: prom/prometheus:latest
