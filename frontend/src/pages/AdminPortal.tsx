@@ -3,14 +3,8 @@ import axios from 'axios';
 import { 
   FileText, Loader2, Home, Layers, Upload, X
 } from 'lucide-react';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
 import type { House, Announcement } from '../types';
 import { useNavigate } from 'react-router-dom';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
 
 const AdminPortal: React.FC = () => {
   const navigate = useNavigate();
