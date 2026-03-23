@@ -3,7 +3,6 @@ version: '3.8'
 services:
   prometheus-local:
     image: prom/prometheus:latest
-    container_name: prometheus-local
     volumes:
       - ./deploy/prometheus/prometheus.local.yml:/etc/prometheus/prometheus.yml
     ports:
@@ -12,7 +11,6 @@ services:
 
   grafana-local:
     image: grafana/grafana:latest
-    container_name: grafana-local
     ports:
       - "3001:3000"
     environment:
