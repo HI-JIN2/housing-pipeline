@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'production-parser'
+    static_configs:
+      - targets: ['134.185.116.52:8000']
+
+  - job_name: 'production-geo'
+    static_configs:
+      - targets: ['134.185.116.52:8001']
+
+  - job_name: 'production-admin'
+    static_configs:
+      - targets: ['134.185.116.52:8002']
