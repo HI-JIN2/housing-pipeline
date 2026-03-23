@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from prometheus_fastapi_instrumentator import Instrumentator
 from contextlib import asynccontextmanager
 import asyncio
 import os
@@ -25,6 +26,9 @@ async def lifespan(app: FastAPI):
     await db_service.close_pool()
 
 app = FastAPI(title="Geo Agent (공고zip)", lifespan=lifespan)
+
+# Instrument FastAPI for Prometheus metrics
+Instrumentator().instrument(app).expose(app)
 
 # Direct health check
 @app.get("/api/health")

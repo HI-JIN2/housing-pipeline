@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from prometheus_fastapi_instrumentator import Instrumentator
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 from contextlib import asynccontextmanager
@@ -26,6 +27,9 @@ async def lifespan(app: FastAPI):
     await db_service.close_pool()
 
 app = FastAPI(title="Parser Agent (공고zip)", lifespan=lifespan)
+
+# Instrument FastAPI for Prometheus metrics
+Instrumentator().instrument(app).expose(app)
 
 # Direct health check to verify container is up
 @app.get("/api/health")

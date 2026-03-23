@@ -42,6 +42,15 @@ resource "oci_core_instance" "housing_server" {
     ssh_authorized_keys = var.ssh_public_key
     user_data           = base64encode(file("${path.module}/userdata.sh"))
   }
+
+  agent_config {
+    is_monitoring_disabled = false
+    is_management_disabled = false
+    plugins_config {
+      desired_state = "ENABLED"
+      name          = "Compute Instance Monitoring"
+    }
+  }
 }
 
 # 2. New ARM Instance (Goal)
@@ -70,6 +79,15 @@ resource "oci_core_instance" "housing_server_arm" {
   metadata = {
     ssh_authorized_keys = var.ssh_public_key
     user_data           = base64encode(file("${path.module}/userdata.sh"))
+  }
+
+  agent_config {
+    is_monitoring_disabled = false
+    is_management_disabled = false
+    plugins_config {
+      desired_state = "ENABLED"
+      name          = "Compute Instance Monitoring"
+    }
   }
 }
 
