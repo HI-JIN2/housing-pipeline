@@ -1,5 +1,6 @@
 import openpyxl
 import io
+import logging
 
 class ExcelService:
     @staticmethod
@@ -14,8 +15,8 @@ class ExcelService:
                     row_data = [str(cell) for cell in row if cell is not None]
                     if row_data:
                         text_content.append(" | ".join(row_data))
-            
-            return "\n".join(text_content)
+            from typing import Tuple, Optional
+            return "\n".join(text_content), len([r for s in wb.worksheets for r in s.iter_rows(values_only=True) if any(cell is not None for cell in r)])
         except Exception as e:
-            print(f"Failed to read Excel file: {e}")
-            return ""
+            logging.error(f"Failed to read Excel file: {e}")
+            return "", None

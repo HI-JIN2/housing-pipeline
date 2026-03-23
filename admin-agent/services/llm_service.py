@@ -18,8 +18,9 @@ class LLMService:
             if val and val != "your_gemini_api_key_here":
                 self.api_keys.append(val)
         
+        import logging
         if not self.api_keys:
-            print("Warning: No GEMINI_API_KEY found in environment.")
+            logging.warning("No GEMINI_API_KEY found in environment.")
         
         self.current_key_idx = 0
         
@@ -51,25 +52,25 @@ class LLMService:
     def _switch_model(self, remove_current=False):
         if remove_current and len(self.available_models) > 1:
             removed = self.available_models.pop(self.current_model_idx)
-            print(f"🚫 Removing unsupported model: {removed}")
+            logging.info(f"🚫 Removing unsupported model: {removed}")
             if self.current_model_idx >= len(self.available_models):
                 self.current_model_idx = 0
         else:
             self.current_model_idx = (self.current_model_idx + 1) % len(self.available_models)
             
         model_name = self.available_models[self.current_model_idx]
-        print(f"🔄 Switching model to: {model_name}")
+        logging.info(f"🔄 Switching model to: {model_name}")
         self.active_gemini_model = model_name
         return model_name
 
     def _switch_key(self):
         if not self.api_keys or len(self.api_keys) <= 1:
-            print("⚠️ No more keys to switch to.")
+            logging.warning("⚠️ No more keys to switch to.")
             return False
             
         self.current_key_idx = (self.current_key_idx + 1) % len(self.api_keys)
         new_key = self.api_keys[self.current_key_idx]
-        print(f"🔑 Switching API Key to index {self.current_key_idx} (Ends in ...{new_key[-4:]})")
+        logging.info(f"🔑 Switching API Key to index {self.current_key_idx} (Ends in ...{new_key[-4:]})")
         
         self.gemini_client = genai.Client(api_key=new_key)
         self.current_model_idx = 0
@@ -115,35 +116,19 @@ class LLMService:
         if current_chunk:
             chunks.append("".join(current_chunk))
             
-        print(f"📦 Context-Aware Chunking: Split {len(pages)} pages into {len(chunks)} chunks.")
+        import logging
+        logging.info(f"📦 Context-Aware Chunking: Split {len(pages)} pages into {len(chunks)} chunks.")
         return chunks
 
     async def parse_housing_data(self, text: str, expected_count: Optional[int] = None, job_id: Optional[str] = None, provider: str = "gemini", model_name: Optional[str] = None, api_key: Optional[str] = None):
         text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
         
-        # Configure Provider & Model
-        if provider == "openai":
-            client = OpenAI(api_key=api_key) if api_key else self.openai_client
-            active_model = model_name or "gpt-4o"
-            if active_model.startswith("models/"):
-                active_model = active_model.replace("models/", "")
-            
-            if not client:
-                await update_status(0, "ERROR_OPENAI_NOT_CONFIGURED")
-                return {"error": "OpenAI client not configured. Check OPENAI_API_KEY in .env"}
-        else:
-            # Gemini Initialization (using new SDK Client)
-            active_model = model_name or self.active_gemini_model
-            if api_key:
-                # Use per-request key
-                gemini_client = genai.Client(api_key=api_key)
-            else:
-                gemini_client = self.gemini_client
-            
-            # The actual call will use gemini_client.aio.models.generate_content
-            # We don't need to create a model object anymore.
+        # Configure Provider & Model (Default values)
+        active_model = model_name or self.active_gemini_model
+        gemini_client = self.gemini_client
+        client = self.openai_client
 
-        # Helper to update progress
+        # Helper to update progress - Defined FIRST to avoid NameError
         async def update_status(count: int, step: str, error: str = None):
             if job_id:
                 try:
@@ -166,26 +151,44 @@ class LLMService:
                         upsert=True
                     )
                 except Exception as e:
-                    print(f"Failed to update status: {e}")
+                    import logging
+                    logging.error(f"Failed to update status: {e}")
 
         # Initialize status record immediately
         await update_status(0, "STARTING_ANALYSIS")
 
+        # Configure Provider & Model (Override if needed)
+        if provider == "openai":
+            client = OpenAI(api_key=api_key) if api_key else self.openai_client
+            active_model = model_name or "gpt-4o"
+            if active_model.startswith("models/"):
+                active_model = active_model.replace("models/", "")
+            
+            if not client:
+                await update_status(0, "ERROR_OPENAI_NOT_CONFIGURED")
+                return {"error": "OpenAI client not configured. Check OPENAI_API_KEY in .env"}
+        else:
+            if api_key:
+                gemini_client = genai.Client(api_key=api_key)
+            # active_model already set above
+
         try:
             cached_data = await self.mongo_service.get_cache(text_hash)
             if cached_data:
-                print(f"Cache hit from MongoDB for hash {text_hash}")
+                import logging
+                logging.info(f"Cache hit from MongoDB for hash {text_hash}")
                 await update_status(len(cached_data.get("houses", [])), "COMPLETED")
                 return cached_data
         except Exception as e:
-            print(f"Error reading mongo cache: {e}")
+            import logging
+            logging.error(f"Error reading mongo cache: {e}")
 
         # --- Optimized Chunking for Rate Limits ---
         # Larger chunks = fewer requests. 
         # Gemini Flash supports 1M context, so 10k-20k is very safe and efficient for parsing.
         chunks = self._chunk_text(text)
 
-        print(f"Total text length: {len(text)}. Chunked into {len(chunks)} fragments for rate-limit safety.")
+        logging.info(f"Total text length: {len(text)}. Chunked into {len(chunks)} fragments for rate-limit safety.")
         
         # --- Retry Loop for Expected Count ---
         max_retries = 2
@@ -205,7 +208,7 @@ class LLMService:
                 nonlocal completed_chunks, final_title
                 
                 async with semaphore:
-                    print(f"📡 Processing Chunk {idx+1}/{len(chunks)} (Attempt {retry_count+1})...")
+                    logging.info(f"📡 Processing Chunk {idx+1}/{len(chunks)} (Attempt {retry_count+1})...")
                     
                     retry_hint = ""
                     if retry_count > 0:
@@ -279,7 +282,7 @@ class LLMService:
                                 )
                                 response_text = response.text
                             
-                            print(f"✅ Chunk {idx+1} successfully extracted.")
+                            logging.info(f"✅ Chunk {idx+1} successfully extracted.")
                             parsed = json.loads(response_text)
                             chunk_houses = parsed.get("houses", [])
                             
@@ -296,7 +299,7 @@ class LLMService:
 
                         except Exception as e:
                             error_msg = str(e).lower()
-                            print(f"⚠️ Error in Chunk {idx+1} (Call {call_retry+1}): {e}")
+                            logging.error(f"⚠️ Error in Chunk {idx+1} (Call {call_retry+1}): {e}")
                             
                             if "429" in error_msg:
                                 # Rate Limit handling
@@ -342,7 +345,7 @@ class LLMService:
                 if len(all_houses) > len(final_houses):
                     final_houses = all_houses # Keep the best found so far
                 
-                print(f"Count mismatch: Got {len(all_houses)}, Expected {expected_count}. Retrying ({retry_count}/{max_retries})...")
+                logging.info(f"Count mismatch: Got {len(all_houses)}, Expected {expected_count}. Retrying ({retry_count}/{max_retries})...")
                 await update_status(len(final_houses), f"RETRYING_ATTEMPT_{retry_count+1}")
                 await asyncio.sleep(5) 
             else:
@@ -378,7 +381,7 @@ class LLMService:
         try:
             await self.mongo_service.save_cache(text_hash, final_result)
             await update_status(len(valid_houses), "COMPLETED")
-            print(f"FINAL RESULT: {len(valid_houses)} items stored.")
+            logging.info(f"FINAL RESULT: {len(valid_houses)} items stored.")
         except Exception as e:
             print(f"Cache write error: {e}")
             

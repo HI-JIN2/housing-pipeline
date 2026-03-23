@@ -1,21 +1,21 @@
-# Production Dockerfile for Parser Agent
+# Production Dockerfile for Admin Agent
 FROM python:3.9-slim
 
 WORKDIR /app
 
 # Install dependencies first for caching
-COPY parser-agent/requirements.txt .
+COPY admin-agent/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy shared library
 COPY shared /app/shared
 
 # Copy agent code
-COPY parser-agent /app/parser-agent
+COPY admin-agent /app/admin-agent
 
 # Set python path to include the root for shared module access
-ENV PYTHONPATH=/app:/app/parser-agent
+ENV PYTHONPATH=/app:/app/admin-agent
 
-EXPOSE 8000
+EXPOSE 8002
 
-CMD ["uvicorn", "parser-agent.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "admin-agent.main:app", "--host", "0.0.0.0", "--port", "8002"]

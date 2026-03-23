@@ -18,7 +18,6 @@ def ping():
     return {"status": "pong", "message": "API server is reachable"}
 
 GEO_AGENT_URL = os.getenv("GEO_AGENT_URL", "http://localhost:8001/api/enrich")
-GEO_AGENT_URL = os.getenv("GEO_AGENT_URL", "http://localhost:8001/api/enrich")
 
 @router.get("/config")
 def get_config():

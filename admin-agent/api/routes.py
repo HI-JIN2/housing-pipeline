@@ -1,4 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Header, BackgroundTasks
+import logging
 from typing import Optional, List
 import httpx
 import asyncio
@@ -79,7 +80,7 @@ async def save_announcement(data: dict, x_admin_password: Optional[str] = Header
             from urllib.parse import quote
             await client.delete(f"{base_url}/housing/{quote(announcement_title)}", timeout=10.0)
         except Exception as e:
-            print(f"Postgres cleanup failed: {e}")
+            logging.error(f"Postgres cleanup failed: {e}")
         
         tasks = []
         for house in houses:
@@ -103,7 +104,7 @@ async def delete_announcement(announcement_id: str, x_admin_password: Optional[s
                 try:
                     await client.delete(f"{base_url}/housing/{quote(title)}", timeout=10.0)
                 except Exception as e:
-                    print(f"Geo Agent cleanup failed: {e}")
+                    logging.error(f"Geo Agent cleanup failed: {e}")
     
     success = await mongo_service.delete_announcement(announcement_id)
     if not success:
@@ -112,7 +113,8 @@ async def delete_announcement(announcement_id: str, x_admin_password: Optional[s
     return {"status": "success"}
 
 @router.get("/status/{job_id}")
-async def get_job_status(job_id: str):
+async def get_job_status(job_id: str, x_admin_password: Optional[str] = Header(None)):
+    verify_admin(x_admin_password)
     # Status needs to be accessible for admin to track upload progress
     try:
         status = await mongo_service.db.job_status.find_one({"job_id": job_id})

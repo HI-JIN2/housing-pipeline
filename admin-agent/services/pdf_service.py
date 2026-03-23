@@ -1,6 +1,7 @@
 import pdfplumber
 import io
 import csv
+import logging
 
 class PDFService:
     @staticmethod
@@ -8,7 +9,7 @@ class PDFService:
         text_content = []
         try:
             with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-                print(f"PDF opened with pdfplumber. Total pages: {len(pdf.pages)}")
+                logging.info(f"PDF opened with pdfplumber. Total pages: {len(pdf.pages)}")
                 for i, page in enumerate(pdf.pages):
                     page_parts = []
                     
@@ -36,9 +37,9 @@ class PDFService:
                     text_content.append(f"--- PAGE {i+1} ---\n" + "\n".join(page_parts))
             
             combined_text = "\n\n".join(text_content)
-            print(f"PDF Extraction Complete. Total characters: {len(combined_text)}")
+            logging.info(f"PDF Extraction Complete. Total characters: {len(combined_text)}")
             return combined_text
             
         except Exception as e:
-            print(f"Error extracting PDF with pdfplumber (CSV mode): {e}")
+            logging.error(f"Error extracting PDF with pdfplumber (CSV mode): {e}")
             return ""

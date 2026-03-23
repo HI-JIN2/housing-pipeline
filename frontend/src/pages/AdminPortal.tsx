@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { 
   FileText, Loader2, Home, Layers, Upload, X
@@ -20,20 +20,20 @@ const AdminPortal: React.FC = () => {
   const [userApiKey, setUserApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
   const [parsingStatus, setParsingStatus] = useState('');
 
-  useEffect(() => {
-    if (isAdminAuthenticated) {
-      fetchAnnouncements();
-    }
-  }, [isAdminAuthenticated]);
-
-  const fetchAnnouncements = async () => {
+  const fetchAnnouncements = useCallback(async () => {
     try {
       const res = await axios.get('/api/announcements');
       setAnnouncements(res.data.data);
-    } catch (err) {
-      console.error('Failed to fetch:', err);
+    } catch {
+      console.error('Failed to fetch announcements');
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (isAdminAuthenticated) {
+      void fetchAnnouncements();
+    }
+  }, [isAdminAuthenticated, fetchAnnouncements]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,8 +83,8 @@ const AdminPortal: React.FC = () => {
           'x-admin-password': adminPassword
         }
       });
-    } catch (err) {
-      console.error('Upload failed:', err);
+    } catch {
+      console.error('Upload failed');
       clearInterval(pollInterval);
       setUploading(false);
     }
@@ -103,8 +103,8 @@ const AdminPortal: React.FC = () => {
       });
       setPreviewData(null);
       fetchAnnouncements();
-    } catch (err) {
-      console.error('Save failed:', err);
+    } catch {
+      console.error('Save failed');
     } finally {
       setUploading(false);
     }
@@ -117,8 +117,8 @@ const AdminPortal: React.FC = () => {
          headers: { 'x-admin-password': adminPassword }
        });
        fetchAnnouncements();
-     } catch (err) {
-       console.error('Delete failed:', err);
+     } catch {
+       console.error('Delete failed');
      }
   };
 

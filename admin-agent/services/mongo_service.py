@@ -1,4 +1,5 @@
 import os
+import logging
 from motor.motor_asyncio import AsyncIOMotorClient
 from typing import List, Dict, Any, Optional
 
@@ -70,12 +71,14 @@ class MongoService:
             if doc:
                 doc['_id'] = str(doc['_id'])
             return doc
-        except Exception:
+        except Exception as e:
+            logging.error(f"Failed to retrieve announcement {announcement_id}: {e}")
             return None
     async def delete_announcement(self, announcement_id: str):
         from bson.objectid import ObjectId
         try:
             await self.announcements_collection.delete_one({"_id": ObjectId(announcement_id)})
             return True
-        except Exception:
+        except Exception as e:
+            logging.error(f"Failed to delete announcement {announcement_id}: {e}")
             return False

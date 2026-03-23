@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { 
   FileText, Home as HomeIcon, MapPin, 
@@ -25,20 +25,16 @@ const Home: React.FC = () => {
   const [expandedHouseId, setExpandedHouseId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  useEffect(() => {
-    fetchAnnouncements();
-  }, []);
-
-  const fetchAnnouncements = async () => {
+  const fetchAnnouncements = useCallback(async () => {
     try {
       const res = await axios.get('/api/announcements');
       setAnnouncements(res.data.data);
-    } catch (err) {
-      console.error('Failed to fetch:', err);
+    } catch {
+      console.error('Failed to fetch announcements');
     }
-  };
+  }, []);
 
-  const loadDetail = async (id: string) => {
+  const loadDetail = useCallback(async (id: string) => {
     setSelectedId(id);
     setSelectedHouseId(null);
     setExpandedHouseId(null);
@@ -46,10 +42,15 @@ const Home: React.FC = () => {
     try {
       const res = await axios.get(`/api/announcements/${id}`);
       setDetail(res.data.data);
-    } catch (err) {
+    } catch {
       setError('상세 정보를 불러오지 못했습니다.');
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchAnnouncements();
+  }, [fetchAnnouncements]);
 
   const filteredHouses = detail?.filter(h => 
     h.address.toLowerCase().includes(searchTerm.toLowerCase())
