@@ -58,7 +58,9 @@ resource "oci_core_security_list" "housing_security_list" {
       max = 80
     }
   }
-
+  ingress_security_rules {
+    protocol = "6" # TCP
+    source   = "0.0.0.0/0"
     tcp_options {
       min = 5173
       max = 5173
