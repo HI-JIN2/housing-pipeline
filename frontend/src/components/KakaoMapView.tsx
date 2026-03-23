@@ -1,7 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 
 declare global {
   interface Window {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     kakao: any;
   }
 }
@@ -31,17 +32,15 @@ interface MapProps {
 
 const KakaoMapView: React.FC<MapProps> = ({ houses, selectedHouseId }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapInstance = useRef<any>(null);
-  const markersRef = useRef<{ [key: string]: any }>({});
-  const infoWindowsRef = useRef<{ [key: string]: any }>({});
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const markersRef = useRef<Record<string, any>>({});
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const infoWindowsRef = useRef<Record<string, any>>({});
 
-  const applySelection = (id: string | null | undefined) => {
+  const applySelection = useCallback((id: string | null | undefined) => {
     if (!id || !mapInstance.current || !markersRef.current[id]) {
-      console.log("⏭️ applySelection skipped", {
-        id, 
-        hasMap: !!mapInstance.current, 
-        hasMarker: id ? !!markersRef.current[id] : false
-      });
       return;
     }
 
@@ -54,10 +53,11 @@ const KakaoMapView: React.FC<MapProps> = ({ houses, selectedHouseId }) => {
     map.setLevel(3); // Zoom in
     
     // Close all other info windows
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     Object.values(infoWindowsRef.current).forEach((iw: any) => iw.close());
     infowindow.open(map, marker);
     console.log("✨ Centered on marker:", id);
-  };
+  }, []);
 
   // Initialize Map
   useEffect(() => {
@@ -137,6 +137,7 @@ const KakaoMapView: React.FC<MapProps> = ({ houses, selectedHouseId }) => {
         });
 
         window.kakao.maps.event.addListener(marker, 'click', () => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           Object.values(infoWindowsRef.current).forEach((iw: any) => iw.close());
           infowindow.open(map, marker);
         });
@@ -162,12 +163,12 @@ const KakaoMapView: React.FC<MapProps> = ({ houses, selectedHouseId }) => {
     if (window.kakao && window.kakao.maps) {
       window.kakao.maps.load(initMap);
     }
-  }, [houses]);
+  }, [houses, selectedHouseId, applySelection]);
 
   // Handle selection change
   useEffect(() => {
     applySelection(selectedHouseId);
-  }, [selectedHouseId]);
+  }, [selectedHouseId, applySelection]);
 
   return (
     <div 

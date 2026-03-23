@@ -18,11 +18,6 @@ def ping():
     return {"status": "pong", "message": "API server is reachable"}
 
 GEO_AGENT_URL = os.getenv("GEO_AGENT_URL", "http://localhost:8001/api/enrich")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "PLEASE_SET_ADMIN_PASSWORD_IN_DOTENV")
-
-def verify_admin(x_admin_password: Optional[str] = Header(None)):
-    if x_admin_password != ADMIN_PASSWORD:
-        raise HTTPException(status_code=401, detail="Unauthorized: Admin password required or incorrect.")
 
 @router.get("/config")
 def get_config():
@@ -83,46 +78,6 @@ async def get_announcement_details(announcement_id: str):
             
     return {"status": "success", "data": results}
 
-@router.post("/upload")
-async def upload_files(
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-    x_job_id: str = Header(None),
-    x_gemini_key: str = Header(None),
-    x_provider: str = Header("gemini"),
-    x_model: str = Header(None),
-    x_admin_password: Optional[str] = Header(None)
-):
-    """
-    고시공고 PDF 또는 엑셀 파일을 업로드하여 파싱합니다.
-    """
-    verify_admin(x_admin_password)
-    contents = await file.read()
-    filename = file.filename
-    
-    # 텍스트 추출 (PDF/XLSX)
-    text = ""
-    expected_count = None
-    
-    if filename.lower().endswith(".pdf"):
-        text = PDFService.extract_text(contents)
-    elif filename.lower().endswith((".xlsx", ".xls")):
-        text, expected_count = ExcelService.extract_text(contents)
-    else:
-        raise HTTPException(status_code=400, detail="Unsupported file format. Only PDF and Excel files are allowed.")
-
-    # 백그라운드에서 LLM 분석 수행
-    background_tasks.add_task(
-        llm_service.parse_housing_data,
-        text=text,
-        api_key=x_gemini_key,
-        expected_count=expected_count,
-        job_id=x_job_id,
-        provider=x_provider,
-        model_name=x_model
-    )
-    
-    return {"status": "processing", "job_id": x_job_id}
 
 @router.get("/status/{job_id}")
 async def get_job_status(job_id: str):
@@ -159,69 +114,4 @@ async def get_job_status(job_id: str):
     except Exception as e:
         return {"count": 0, "step": "ERROR", "detail": str(e)}
 
-@router.post("/save")
-async def save_announcement(data: dict, x_admin_password: Optional[str] = Header(None)):
-    verify_admin(x_admin_password)
-    announcement_title = data.get("announcement_title", "Untitled")
-    houses = data.get("houses", [])
-    
-    if not houses:
-        raise HTTPException(status_code=400, detail="No houses to save")
 
-    # 1. Save to Mongo
-    # Use title as a stable identifier for duplicate prevention in Mongo if needed,
-    # or just create a new one. Here we create a new one or update existing by title.
-    announcement_id = str(uuid.uuid4()) # For internal grouping
-    
-    await mongo_service.save_announcement({
-        "announcement_title": announcement_title,
-        "announcement_description": data.get("announcement_description"),
-        "parsed_houses": houses,
-        "created_at": str(uuid.uuid1()) # Timestamp surrogate
-    })
-
-    # 2. Sync to Geo Agent (Postgres)
-    # First, delete existing data for this title to avoid duplicates
-    from urllib.parse import quote
-    async with httpx.AsyncClient() as client:
-        # Construct base URL carefully
-        base_url = GEO_AGENT_URL.rsplit('/', 1)[0]
-        try:
-            await client.delete(f"{base_url}/housing/{quote(announcement_title)}", timeout=10.0)
-        except Exception as e:
-            print(f"Initial Postgres cleanup failed for title '{announcement_title}': {e}")
-        
-        tasks = []
-        for house in houses:
-            house['announcement_id'] = announcement_title
-            tasks.append(client.post(GEO_AGENT_URL, json=house, timeout=60.0))
-        
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-    return {"status": "success", "message": f"Saved {len(houses)} records"}
-
-@router.delete("/announcements/{announcement_id}")
-async def delete_announcement(announcement_id: str, x_admin_password: Optional[str] = Header(None)):
-    verify_admin(x_admin_password)
-    # 1. Get title from Mongo first to clean up Postgres
-    doc = await mongo_service.get_announcement(announcement_id)
-    if doc:
-        title = doc.get("announcement_title")
-        if title:
-            from urllib.parse import quote
-            async with httpx.AsyncClient() as client:
-                # Construct base URL carefully: e.g., http://geo:8000/api/enrich -> http://geo:8000/api
-                base_url = GEO_AGENT_URL.rsplit('/', 1)[0]
-                try:
-                    target_url = f"{base_url}/housing/{quote(title)}"
-                    await client.delete(target_url, timeout=10.0)
-                except Exception as e:
-                    print(f"Postgres cleanup (Geo Agent) failed for title '{title}': {e}")
-                    # Continue to delete from Mongo even if Geo Agent cleanup fails
-    
-    # 2. Delete from Mongo
-    success = await mongo_service.delete_announcement(announcement_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Announcement not found")
-        
-    return {"status": "success"}

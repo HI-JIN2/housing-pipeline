@@ -36,6 +36,14 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/housing-geo:latest
 
+      - name: Build and Push Admin Agent
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: admin-agent/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/housing-admin:latest
+
       - name: Inject Kakao JS Key
         run: |
           sed -i "s|%VITE_KAKAO_JS_KEY%|${{ secrets.KAKAO_JS_KEY }}|g" frontend/index.html
@@ -94,6 +102,7 @@ jobs:
             # Ensure ports are open in OS firewall
             sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT || true
             sudo iptables -I INPUT -p tcp --dport 8000 -j ACCEPT || true
+            sudo iptables -I INPUT -p tcp --dport 8002 -j ACCEPT || true
             sudo iptables -I INPUT -p tcp --dport 5173 -j ACCEPT || true
             sudo iptables -I INPUT -p tcp --dport 3000 -j ACCEPT || true
             sudo iptables -I INPUT -p tcp --dport 9090 -j ACCEPT || true
@@ -117,6 +126,7 @@ jobs:
             # Create .env file for Docker Compose to ensure variables are preserved
             echo "DOCKER_IMAGE_PARSER=${{ secrets.DOCKERHUB_USERNAME }}/housing-parser:latest" > .env
             echo "DOCKER_IMAGE_GEO=${{ secrets.DOCKERHUB_USERNAME }}/housing-geo:latest" >> .env
+            echo "DOCKER_IMAGE_ADMIN=${{ secrets.DOCKERHUB_USERNAME }}/housing-admin:latest" >> .env
             echo "DOCKER_IMAGE_FRONTEND=${{ secrets.DOCKERHUB_USERNAME }}/housing-frontend:latest" >> .env
             echo "KAKAO_REST_API_KEY=${{ secrets.KAKAO_REST_API_KEY }}" >> .env
             echo "ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}" >> .env

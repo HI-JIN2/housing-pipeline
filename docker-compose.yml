@@ -19,6 +19,24 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
 
+  admin-agent:
+    build:
+      context: .
+      dockerfile: admin-agent/Dockerfile
+    ports:
+      - "8002:8000"
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017
+      - POSTGRES_DSN=postgresql://housing_user:housing_password@db:5432/housing_db
+      - GEO_AGENT_URL=http://geo-agent:8000/api/enrich
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+    depends_on:
+      - mongodb
+      - db
+    volumes:
+      - ./admin-agent:/app/admin-agent
+      - ./shared:/app/shared
+
   prometheus:
     image: prom/prometheus:latest
     volumes:
