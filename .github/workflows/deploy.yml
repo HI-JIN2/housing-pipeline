@@ -60,7 +60,7 @@ jobs:
           host: ${{ secrets.OCI_HOST }}
           username: ubuntu
           key: ${{ secrets.OCI_SSH_KEY }}
-          source: "deploy/docker-compose.prod.yml"
+          source: "deploy/*"
           target: "/home/ubuntu/housing-pipeline"
 
       - name: Deploy to OCI via SSH
