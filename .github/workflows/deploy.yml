@@ -102,6 +102,7 @@ jobs:
             # Ensure ports are open in OS firewall
             sudo iptables -I INPUT -p tcp --dport 80 -j ACCEPT || true
             sudo iptables -I INPUT -p tcp --dport 8000 -j ACCEPT || true
+            sudo iptables -I INPUT -p tcp --dport 8001 -j ACCEPT || true
             sudo iptables -I INPUT -p tcp --dport 8002 -j ACCEPT || true
             sudo iptables -I INPUT -p tcp --dport 5173 -j ACCEPT || true
             sudo iptables -I INPUT -p tcp --dport 3000 -j ACCEPT || true
