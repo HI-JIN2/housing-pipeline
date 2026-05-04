@@ -1,9 +1,9 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Header, BackgroundTasks, Query
+from datetime import datetime, timezone
 import logging
 from typing import Optional
 import httpx
 import asyncio
-import uuid
 import os
 from pymongo.errors import ServerSelectionTimeoutError
 from services.pdf_service import PDFService
@@ -113,7 +113,7 @@ async def save_announcement(data: dict, x_admin_password: Optional[str] = Header
             "announcement_title": announcement_title,
             "announcement_description": data.get("announcement_description"),
             "parsed_houses": houses,
-            "created_at": str(uuid.uuid1()),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
     )
 

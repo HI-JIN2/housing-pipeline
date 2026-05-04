@@ -94,8 +94,18 @@ const AdminPortal: React.FC = () => {
     setUploading(true);
     setParsingStatus('요청 전송 중...');
     const jobId = Math.random().toString(36).substring(7);
+    let pollingCancelled = false;
+    let pollingTimer: number | undefined;
 
-    const pollInterval = setInterval(async () => {
+    const stopPolling = () => {
+      pollingCancelled = true;
+      if (pollingTimer !== undefined) {
+        window.clearTimeout(pollingTimer);
+      }
+    };
+
+    const pollStatus = async () => {
+      if (pollingCancelled) return;
       try {
         const res = await axios.get(`/api/admin/status/${jobId}`, { headers: adminHeaders });
 
@@ -116,7 +126,7 @@ const AdminPortal: React.FC = () => {
         }
         
         if (res.data.result) {
-          clearInterval(pollInterval);
+          stopPolling();
           setPreviewData({
             title: res.data.result.announcement_title,
             desc: res.data.result.announcement_description,
@@ -126,8 +136,14 @@ const AdminPortal: React.FC = () => {
         }
       } catch (e) {
         console.error(e);
+      } finally {
+        if (!pollingCancelled) {
+          pollingTimer = window.setTimeout(() => {
+            void pollStatus();
+          }, 2000);
+        }
       }
-    }, 2000);
+    };
 
     const formData = new FormData();
     formData.append('file', pendingFiles[0]);
@@ -140,9 +156,10 @@ const AdminPortal: React.FC = () => {
         }
       });
       setParsingStatus('문서 텍스트 추출 완료. LLM 분석을 시작했습니다...');
+      void pollStatus();
     } catch {
       console.error('Upload failed');
-      clearInterval(pollInterval);
+      stopPolling();
       setUploading(false);
     }
   };
