@@ -3,12 +3,18 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
 from contextlib import asynccontextmanager
-from api.routes import router
 from prometheus_fastapi_instrumentator import Instrumentator
 
 # This allows importing from the shared/ directory
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+# Load env from repo root (.env). start_all.sh runs from subdirs.
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
+
+from api.routes import router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

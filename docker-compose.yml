@@ -24,11 +24,11 @@ services:
       context: .
       dockerfile: admin-agent/Dockerfile
     ports:
-      - "8002:8000"
+      - "8002:8002"
     environment:
       - MONGO_URL=mongodb://mongodb:27017
       - POSTGRES_DSN=postgresql://housing_user:housing_password@db:5432/housing_db
-      - GEO_AGENT_URL=http://geo-agent:8000/api/enrich
+      - GEO_AGENT_URL=http://geo-agent:8001/api/enrich
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
     depends_on:
       - mongodb

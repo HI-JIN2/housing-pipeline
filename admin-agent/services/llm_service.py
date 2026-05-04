@@ -1,11 +1,12 @@
 from google import genai
 from google.genai import types
-from openai import OpenAI
+from openai import AsyncOpenAI
 from shared.models import ParsedHousingData
 from typing import List, Optional
 import os
 import json
 import hashlib
+import logging
 from services.mongo_service import MongoService
 
 class LLMService:
@@ -18,7 +19,6 @@ class LLMService:
             if val and val != "your_gemini_api_key_here":
                 self.api_keys.append(val)
         
-        import logging
         if not self.api_keys:
             logging.warning("No GEMINI_API_KEY found in environment.")
         
@@ -45,7 +45,7 @@ class LLMService:
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         self.openai_client = None
         if self.openai_api_key and self.openai_api_key != "your_openai_api_key_here":
-            self.openai_client = OpenAI(api_key=self.openai_api_key)
+            self.openai_client = AsyncOpenAI(api_key=self.openai_api_key)
         
         self.mongo_service = MongoService()
 
@@ -116,12 +116,20 @@ class LLMService:
         if current_chunk:
             chunks.append("".join(current_chunk))
             
-        import logging
         logging.info(f"📦 Context-Aware Chunking: Split {len(pages)} pages into {len(chunks)} chunks.")
         return chunks
 
-    async def parse_housing_data(self, text: str, expected_count: Optional[int] = None, job_id: Optional[str] = None, provider: str = "gemini", model_name: Optional[str] = None, api_key: Optional[str] = None):
+    async def parse_housing_data(
+        self,
+        text: str,
+        expected_count: Optional[int] = None,
+        job_id: Optional[str] = None,
+        provider: str = "gemini",
+        model_name: Optional[str] = None,
+        api_key: Optional[str] = None,
+    ):
         text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
+        all_houses = []
         
         # Configure Provider & Model (Default values)
         active_model = model_name or self.active_gemini_model
@@ -129,7 +137,13 @@ class LLMService:
         client = self.openai_client
 
         # Helper to update progress - Defined FIRST to avoid NameError
-        async def update_status(count: int, step: str, error: str = None):
+        async def update_status(
+            count: int,
+            step: str,
+            message: Optional[str] = None,
+            error: Optional[str] = None,
+            meta: Optional[dict] = None,
+        ):
             if job_id:
                 try:
                     update_fields = {
@@ -140,8 +154,12 @@ class LLMService:
                         "model": active_model,
                         "provider": provider,
                         "key_idx": self.current_key_idx if provider == "gemini" and not api_key else -1,
-                        "partial_houses": all_houses[-20:] if 'all_houses' in locals() else []
+                        "partial_houses": all_houses[-20:]
                     }
+                    if message:
+                        update_fields["message"] = message
+                    if meta:
+                        update_fields["meta"] = meta
                     if error:
                         update_fields["last_error"] = error
                         
@@ -151,21 +169,20 @@ class LLMService:
                         upsert=True
                     )
                 except Exception as e:
-                    import logging
                     logging.error(f"Failed to update status: {e}")
 
         # Initialize status record immediately
-        await update_status(0, "STARTING_ANALYSIS")
+        await update_status(0, "STARTING_ANALYSIS", message="요청을 수신했습니다. LLM 분석 준비 중...")
 
         # Configure Provider & Model (Override if needed)
         if provider == "openai":
-            client = OpenAI(api_key=api_key) if api_key else self.openai_client
+            client = AsyncOpenAI(api_key=api_key) if api_key else self.openai_client
             active_model = model_name or "gpt-4o"
             if active_model.startswith("models/"):
                 active_model = active_model.replace("models/", "")
             
             if not client:
-                await update_status(0, "ERROR_OPENAI_NOT_CONFIGURED")
+                await update_status(0, "ERROR_OPENAI_NOT_CONFIGURED", message="OpenAI 클라이언트가 설정되지 않았습니다.")
                 return {"error": "OpenAI client not configured. Check OPENAI_API_KEY in .env"}
         else:
             if api_key:
@@ -173,20 +190,33 @@ class LLMService:
             # active_model already set above
 
         try:
+            await update_status(0, "CHECKING_CACHE", message="Mongo 캐시 조회 중...")
             cached_data = await self.mongo_service.get_cache(text_hash)
             if cached_data:
-                import logging
                 logging.info(f"Cache hit from MongoDB for hash {text_hash}")
-                await update_status(len(cached_data.get("houses", [])), "COMPLETED")
+                await update_status(
+                    len(cached_data.get("houses", [])),
+                    "COMPLETED",
+                    message="캐시 히트: 기존 분석 결과를 반환합니다.",
+                    meta={"cache": True},
+                )
                 return cached_data
         except Exception as e:
-            import logging
             logging.error(f"Error reading mongo cache: {e}")
+            await update_status(0, "CACHE_READ_ERROR", message="캐시 조회 실패. 새로 분석을 진행합니다.", error=str(e))
 
         # --- Optimized Chunking for Rate Limits ---
         # Larger chunks = fewer requests. 
         # Gemini Flash supports 1M context, so 10k-20k is very safe and efficient for parsing.
+        await update_status(0, "CHUNKING_TEXT", message="문서 텍스트를 분석 단위로 분할 중...")
         chunks = self._chunk_text(text)
+
+        await update_status(
+            0,
+            "CHUNKING_TEXT_DONE",
+            message=f"텍스트 분할 완료: {len(chunks)}개 청크.",
+            meta={"chunk_total": len(chunks), "text_len": len(text)},
+        )
 
         logging.info(f"Total text length: {len(text)}. Chunked into {len(chunks)} fragments for rate-limit safety.")
         
@@ -198,159 +228,256 @@ class LLMService:
         
         import asyncio
 
-        while retry_count < max_retries:
-            all_houses = []
-            final_title = ""
-            completed_chunks = 0
-            semaphore = asyncio.Semaphore(3)
+        try:
+            while retry_count < max_retries:
+                all_houses = []
+                final_title = ""
+                completed_chunks = 0
+                semaphore = asyncio.Semaphore(3)
 
-            async def process_chunk_worker(idx, chunk_text):
-                nonlocal completed_chunks, final_title
-                
-                async with semaphore:
-                    logging.info(f"📡 Processing Chunk {idx+1}/{len(chunks)} (Attempt {retry_count+1})...")
-                    
-                    retry_hint = ""
-                    if retry_count > 0:
-                        retry_hint = f"\n[RETRY HINT] Previous attempt missed some items. BE EVEN MORE EXHAUSTIVE. DO NOT MISS ANY ROWS."
+                async def process_chunk_worker(idx, chunk_text):
+                    nonlocal completed_chunks, final_title
 
-                    prompt = f"""
-                    [EXTRACTOR MODE: MECHANICAL & EXHAUSTIVE]
-                    You are a data extraction robot. Your purpose is FULL DATA RECALL.{retry_hint}
-                    
-                    [INPUT FORMAT] 
-                    The text below contains CSV-formatted tables (bounded by [TABLE START (CSV)]) and layout-preserved text from an official housing announcement PDF.
-                    
-                    [CRITICAL INSTRUCTIONS]
-                    1. ANALYZE every row in the CSV tables.
-                    2. Extract EVERY SINGLE housing unit/item mentioned                    3. Mandatory Fields:
-                       - "index": Number corresponding to '번호'.
-                       - "district": '자치구' (e.g. 성북구, 은평구).
-                       - "complex_no": '단지번호'.
-                       - "address": '주소'.
-                       - "unit_no": '호' or '동호'.
-                       - "area": '면적' or '전용면적' (as a number).
-                       - "elevator": '승강기' (있음/없음 or Y/N).
-                       - "deposit": '보증금' (number in 만원).
-                       - "monthly_rent": '임대료' (number in 만원).
-                    4. [FLEIXIBLE EXTRA INFO]: Every other column or piece of text not in mandatory list MUST be captured in "extra_info" using descriptive keys. Use MongoDB's schema flexibility - capture everything you find in the PDF.
-                    5. Return ONLY a valid JSON object.
+                    async with semaphore:
+                        logging.info(
+                            f"📡 Processing Chunk {idx+1}/{len(chunks)} (Attempt {retry_count+1})..."
+                        )
 
-                    [JSON SCHEMA]
-                    {{
-                        "announcement_title": "string",
-                        "houses": [
-                            {{
-                                "index": number,
-                                "district": "string",
-                                "complex_no": "string",
-                                "address": "string", 
-                                "unit_no": "string",
-                                "area": number,
-                                "house_type": "string",
-                                "elevator": "string",
-                                "deposit": number,
-                                "monthly_rent": number,
-                                "extra_info": {{ "any_other_column": "value" }}
-                            }}
-                        ]
-                    }}
-                    
-                    [INPUT TEXT]
-                    {chunk_text}
-                    """
-                    
-                    local_model = active_model
-                    for call_retry in range(5):
-                        try:
-                            if provider == "openai":
-                                response = client.chat.completions.create(
-                                    model=local_model,
-                                    messages=[{"role": "user", "content": prompt}],
-                                    response_format={ "type": "json_object" },
-                                    temperature=0.2 if retry_count > 0 else 0.0
+                        await update_status(
+                            len(all_houses),
+                            "CALLING_LLM",
+                            message=f"LLM 호출 중: Chunk {idx+1}/{len(chunks)} (Attempt {retry_count+1})",
+                            meta={
+                                "chunk_idx": idx + 1,
+                                "chunk_total": len(chunks),
+                                "attempt": retry_count + 1,
+                            },
+                        )
+
+                        retry_hint = ""
+                        if retry_count > 0:
+                            retry_hint = (
+                                "\n[RETRY HINT] Previous attempt missed some items. "
+                                "BE EVEN MORE EXHAUSTIVE. DO NOT MISS ANY ROWS."
+                            )
+
+                        prompt = f"""
+                        [EXTRACTOR MODE: MECHANICAL & EXHAUSTIVE]
+                        You are a data extraction robot. Your purpose is FULL DATA RECALL.{retry_hint}
+
+                        [INPUT FORMAT]
+                        The text below contains CSV-formatted tables (bounded by [TABLE START (CSV)]) and layout-preserved text from an official housing announcement PDF.
+
+                        [CRITICAL INSTRUCTIONS]
+                        1. ANALYZE every row in the CSV tables.
+                        2. Extract EVERY SINGLE housing unit/item mentioned
+                        3. Mandatory Fields:
+                           - "index": Number corresponding to '번호'.
+                           - "district": '자치구' (e.g. 성북구, 은평구).
+                           - "complex_no": '단지번호'.
+                           - "address": '주소'.
+                           - "unit_no": '호' or '동호'.
+                           - "area": '면적' or '전용면적' (as a number).
+                           - "elevator": '승강기' (있음/없음 or Y/N).
+                           - "deposit": '보증금' (number in 만원).
+                           - "monthly_rent": '임대료' (number in 만원).
+                        4. [FLEIXIBLE EXTRA INFO]: Every other column or piece of text not in mandatory list MUST be captured in "extra_info" using descriptive keys.
+                        5. Return ONLY a valid JSON object.
+
+                        [JSON SCHEMA]
+                        {{
+                            "announcement_title": "string",
+                            "houses": [
+                                {{
+                                    "index": number,
+                                    "district": "string",
+                                    "complex_no": "string",
+                                    "address": "string",
+                                    "unit_no": "string",
+                                    "area": number,
+                                    "house_type": "string",
+                                    "elevator": "string",
+                                    "deposit": number,
+                                    "monthly_rent": number,
+                                    "extra_info": {{ "any_other_column": "value" }}
+                                }}
+                            ]
+                        }}
+
+                        [INPUT TEXT]
+                        {chunk_text}
+                        """
+
+                        local_model = active_model
+                        for call_retry in range(5):
+                            try:
+                                await update_status(
+                                    len(all_houses),
+                                    "LLM_REQUEST_IN_FLIGHT",
+                                    message=(
+                                        f"응답 대기 중: Chunk {idx+1}/{len(chunks)} "
+                                        f"(Attempt {retry_count+1}, Call {call_retry+1}/5)"
+                                    ),
+                                    meta={
+                                        "chunk_idx": idx + 1,
+                                        "chunk_total": len(chunks),
+                                        "attempt": retry_count + 1,
+                                        "call_retry": call_retry + 1,
+                                        "model": local_model,
+                                    },
                                 )
-                                response_text = response.choices[0].message.content
-                            else:
-                                response = await gemini_client.aio.models.generate_content(
-                                    model=local_model,
-                                    contents=prompt,
-                                    config=types.GenerateContentConfig(
-                                        response_mime_type="application/json",
-                                        temperature=0.2 if retry_count > 0 else 0.0
+                                if provider == "openai":
+                                    response = await client.chat.completions.create(
+                                        model=local_model,
+                                        messages=[{"role": "user", "content": prompt}],
+                                        response_format={"type": "json_object"},
+                                        temperature=0.2 if retry_count > 0 else 0.0,
                                     )
-                                )
-                                response_text = response.text
-                            
-                            logging.info(f"✅ Chunk {idx+1} successfully extracted.")
-                            parsed = json.loads(response_text)
-                            chunk_houses = parsed.get("houses", [])
-                            
-                            if not final_title and parsed.get("announcement_title"):
-                                final_title = parsed.get("announcement_title")
-                            
-                            completed_chunks += 1
-                            await update_status(len(all_houses) + len(chunk_houses), f"ANALYZED_{completed_chunks}_OF_{len(chunks)}_CHUNKS")
-                            
-                            if provider == "gemini":
-                                await asyncio.sleep(0.5)
-                                
-                            return chunk_houses
+                                    response_text = response.choices[0].message.content
+                                else:
+                                    response = await gemini_client.aio.models.generate_content(
+                                        model=local_model,
+                                        contents=prompt,
+                                        config=types.GenerateContentConfig(
+                                            response_mime_type="application/json",
+                                            temperature=0.2 if retry_count > 0 else 0.0,
+                                        ),
+                                    )
+                                    response_text = response.text
 
-                        except Exception as e:
-                            error_msg = str(e).lower()
-                            logging.error(f"⚠️ Error in Chunk {idx+1} (Call {call_retry+1}): {e}")
-                            
-                            if "429" in error_msg:
-                                # Rate Limit handling
-                                wait_time = 5 + (call_retry * 5)
-                                if "quota" in error_msg or "limit exceeded" in error_msg:
-                                    # Hard quota limit, switch something
-                                    if provider == "gemini":
-                                        self._switch_model()
-                                        local_model = self.active_gemini_model
-                                        print(f"🔄 Switched to {local_model}")
-                                        wait_time = 2
-                                else:
-                                    print(f"RPM Limit. Waiting {wait_time}s...")
-                                
-                                await asyncio.sleep(wait_time)
-                                continue
-                            
-                            elif "404" in error_msg or "not found" in error_msg:
+                                logging.info(f"✅ Chunk {idx+1} successfully extracted.")
+                                parsed = json.loads(response_text)
+                                chunk_houses = parsed.get("houses", [])
+
+                                if not final_title and parsed.get("announcement_title"):
+                                    final_title = parsed.get("announcement_title")
+
+                                completed_chunks += 1
+                                await update_status(
+                                    len(all_houses) + len(chunk_houses),
+                                    f"ANALYZED_{completed_chunks}_OF_{len(chunks)}_CHUNKS",
+                                    message=(
+                                        f"Chunk {idx+1}/{len(chunks)} 완료: {len(chunk_houses)}건 추출 "
+                                        f"(누적 {len(all_houses) + len(chunk_houses)}건)"
+                                    ),
+                                    meta={
+                                        "chunk_done": completed_chunks,
+                                        "chunk_total": len(chunks),
+                                    },
+                                )
+
                                 if provider == "gemini":
-                                    local_model = self._switch_model(remove_current=True)
-                                    print(f"🚫 Model not found. Switched to {local_model}")
+                                    await asyncio.sleep(0.5)
+
+                                return chunk_houses
+
+                            except Exception as e:
+                                error_msg = str(e).lower()
+                                logging.error(
+                                    f"⚠️ Error in Chunk {idx+1} (Call {call_retry+1}): {e}"
+                                )
+
+                                await update_status(
+                                    len(all_houses),
+                                    "LLM_CALL_ERROR",
+                                    message=(
+                                        f"LLM 호출 오류: Chunk {idx+1}/{len(chunks)} "
+                                        f"(Call {call_retry+1}/5)"
+                                    ),
+                                    error=str(e),
+                                    meta={
+                                        "chunk_idx": idx + 1,
+                                        "chunk_total": len(chunks),
+                                        "attempt": retry_count + 1,
+                                        "call_retry": call_retry + 1,
+                                    },
+                                )
+
+                                if "429" in error_msg:
+                                    wait_time = 5 + (call_retry * 5)
+                                    if "quota" in error_msg or "limit exceeded" in error_msg:
+                                        if provider == "gemini":
+                                            self._switch_model()
+                                            local_model = self.active_gemini_model
+                                            print(f"🔄 Switched to {local_model}")
+                                            wait_time = 2
+                                    else:
+                                        print(f"RPM Limit. Waiting {wait_time}s...")
+
+                                    await update_status(
+                                        len(all_houses),
+                                        "RATE_LIMIT_BACKOFF",
+                                        message=(
+                                            f"레이트리밋 대기: {wait_time}s "
+                                            f"(Chunk {idx+1}/{len(chunks)})"
+                                        ),
+                                        meta={
+                                            "wait_seconds": wait_time,
+                                            "chunk_idx": idx + 1,
+                                            "chunk_total": len(chunks),
+                                        },
+                                    )
+
+                                    await asyncio.sleep(wait_time)
                                     continue
-                                else:
+
+                                if "404" in error_msg or "not found" in error_msg:
+                                    if provider == "gemini":
+                                        await update_status(
+                                            len(all_houses),
+                                            "SWITCHING_MODEL",
+                                            message=f"모델 오류로 전환 중: {local_model}",
+                                        )
+                                        local_model = self._switch_model(remove_current=True)
+                                        print(f"🚫 Model not found. Switched to {local_model}")
+                                        continue
                                     break
-                            else:
-                                # Other errors
+
                                 await asyncio.sleep(2)
                                 continue
-                    return []
 
-            # Execute all chunks as concurrent tasks
-            tasks = [process_chunk_worker(i, chunk) for i, chunk in enumerate(chunks)]
-            results = await asyncio.gather(*tasks)
-            
-            # Aggregate results
-            for chunk_houses in results:
-                if chunk_houses:
-                    all_houses.extend(chunk_houses)
+                        return []
 
-            # Check if we should retry
-            if expected_count and len(all_houses) < (expected_count * 0.95):
-                retry_count += 1
-                if len(all_houses) > len(final_houses):
-                    final_houses = all_houses # Keep the best found so far
-                
-                logging.info(f"Count mismatch: Got {len(all_houses)}, Expected {expected_count}. Retrying ({retry_count}/{max_retries})...")
-                await update_status(len(final_houses), f"RETRYING_ATTEMPT_{retry_count+1}")
-                await asyncio.sleep(5) 
-            else:
-                final_houses = all_houses
-                break
+                tasks = [process_chunk_worker(i, chunk) for i, chunk in enumerate(chunks)]
+                results = await asyncio.gather(*tasks)
+
+                for chunk_houses in results:
+                    if chunk_houses:
+                        all_houses.extend(chunk_houses)
+
+                if expected_count and len(all_houses) < (expected_count * 0.95):
+                    retry_count += 1
+                    if len(all_houses) > len(final_houses):
+                        final_houses = all_houses
+
+                    logging.info(
+                        f"Count mismatch: Got {len(all_houses)}, Expected {expected_count}. "
+                        f"Retrying ({retry_count}/{max_retries})..."
+                    )
+                    await update_status(
+                        len(final_houses),
+                        f"RETRYING_ATTEMPT_{retry_count+1}",
+                        message=(
+                            f"누락 가능성 감지: {len(all_houses)}건 / 기대 {expected_count}건. "
+                            "재시도 중..."
+                        ),
+                        meta={"attempt": retry_count + 1, "max_retries": max_retries},
+                    )
+                    await asyncio.sleep(5)
+                else:
+                    final_houses = all_houses
+                    break
+
+        except Exception as e:
+            await update_status(
+                0,
+                "ERROR",
+                message="LLM 분석 중 예외가 발생했습니다.",
+                error=str(e),
+            )
+            raise
+
+        await update_status(len(final_houses), "VALIDATING_RESULTS", message="추출 결과 검증/정규화 중...")
 
         valid_houses = []
         skip_count = 0
@@ -361,6 +488,13 @@ class LLMService:
                 # Append index to prevent ID collisions for identical units in the same building
                 item["id"] = f"h-{stable_id}-{index}"
                 valid_houses.append(ParsedHousingData(**item).model_dump())
+                if (index + 1) % 25 == 0:
+                    await update_status(
+                        len(valid_houses),
+                        "VALIDATING_RESULTS",
+                        message=f"검증 진행: {index+1}/{len(final_houses)} (유효 {len(valid_houses)}건)",
+                        meta={"validated": index + 1, "extracted": len(final_houses)},
+                    )
             except Exception as e:
                 skip_count += 1
                 if skip_count <= 5:
@@ -379,10 +513,12 @@ class LLMService:
 
         # Save to MongoDB cache
         try:
+            await update_status(len(valid_houses), "CACHING_RESULT", message="Mongo 캐시에 결과 저장 중...")
             await self.mongo_service.save_cache(text_hash, final_result)
-            await update_status(len(valid_houses), "COMPLETED")
+            await update_status(len(valid_houses), "COMPLETED", message="분석 완료. 프리뷰 데이터를 준비했습니다.")
             logging.info(f"FINAL RESULT: {len(valid_houses)} items stored.")
         except Exception as e:
             print(f"Cache write error: {e}")
+            await update_status(len(valid_houses), "CACHE_WRITE_ERROR", message="캐시 저장 실패. 결과는 반환하지만 재사용 캐시는 없습니다.", error=str(e))
             
         return final_result
