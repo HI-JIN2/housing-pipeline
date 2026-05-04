@@ -101,6 +101,9 @@ Git / commits:
 - Commit messages use a conventional tag like `feat:`, `fix:`, `chore:` and then a concise Korean description.
 - Pull request titles should follow the same convention as commit messages, for example `feat: ...`, `fix: ...`, `refactor: ...`, rather than custom prefixes like `[codex]`.
 - Pull request bodies should use `.github/pull_request_template.md` and be written in Korean.
+- Pull request bodies must be filled with the actual change details; do not leave template sections blank.
+- Pull request bodies should explicitly cover problem/context, what changed, impact, and validation results for the current diff.
+- If the user says `코리`, treat it as a request to check code review feedback, apply the fixes, run reasonable validation, then commit and push the changes on the current branch unless the user says otherwise.
 - If the user says `달팽이`, treat it as a default workflow trigger: pull latest `main`, create a new branch from that updated `main`, then do the requested work and finish with commit, push, and PR creation unless the user says otherwise.
 
 Python (`parser-agent/`, `geo-agent/`, `shared/`):
