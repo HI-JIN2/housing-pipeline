@@ -9,6 +9,26 @@ import hashlib
 import logging
 from services.mongo_service import MongoService
 
+EXTRA_INFO_KEY_MAP = {
+    "max_conversion_deposit": "최대전환보증금",
+    "max_conversion_rent": "최대전환월세",
+    "min_conversion_deposit": "최소전환보증금",
+    "min_conversion_rent": "최소전환월세",
+}
+
+
+def normalize_extra_info_keys(extra_info):
+    if not isinstance(extra_info, dict):
+        return {}
+
+    normalized = {}
+    for key, value in extra_info.items():
+        if not isinstance(key, str):
+            normalized[key] = value
+            continue
+        normalized[EXTRA_INFO_KEY_MAP.get(key, key)] = value
+    return normalized
+
 class LLMService:
     def __init__(self):
         # Collect all available Gemini API keys from environment
@@ -281,7 +301,7 @@ class LLMService:
                            - "elevator": '승강기' (있음/없음 or Y/N).
                            - "deposit": '보증금' (number in 만원).
                            - "monthly_rent": '임대료' (number in 만원).
-                        4. [FLEIXIBLE EXTRA INFO]: Every other column or piece of text not in mandatory list MUST be captured in "extra_info" using descriptive keys.
+                        4. [FLEIXIBLE EXTRA INFO]: Every other column or piece of text not in mandatory list MUST be captured in "extra_info". Use the original Korean column names whenever possible. Do not invent unnecessary English keys when a Korean label exists.
                         5. Return ONLY a valid JSON object.
 
                         [JSON SCHEMA]
@@ -487,6 +507,7 @@ class LLMService:
                 stable_id = hashlib.md5(house_identity.encode()).hexdigest()
                 # Append index to prevent ID collisions for identical units in the same building
                 item["id"] = f"h-{stable_id}-{index}"
+                item["extra_info"] = normalize_extra_info_keys(item.get("extra_info"))
                 valid_houses.append(ParsedHousingData(**item).model_dump())
                 if (index + 1) % 25 == 0:
                     await update_status(
