@@ -27,6 +27,7 @@ jobs:
           TF_VAR_region: "ap-chuncheon-1"
           TF_VAR_compartment_ocid: ${{ secrets.OCI_COMPARTMENT_OCID }}
           TF_VAR_ssh_public_key: ${{ secrets.OCI_SSH_PUBLIC_KEY }}
+          TF_VAR_monitoring_source_cidr: ${{ secrets.OCI_MONITORING_SOURCE_CIDR }}
         run: |
           terraform init -reconfigure -backend-config="address=${{ secrets.OCI_BACKEND_URL }}"
           terraform apply -auto-approve -lock=false

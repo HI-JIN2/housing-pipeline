@@ -49,6 +49,9 @@ MONGO_URL="mongodb://127.0.0.1:27017"
 
 # Admin Security
 ADMIN_PASSWORD="your_secure_admin_password"
+
+# Local Monitoring
+GRAFANA_PASSWORD="your_local_grafana_password"
 ```
 
 ### 3. Execution
@@ -66,6 +69,11 @@ For Oracle Cloud Infrastructure (OCI) Always Free deployment:
 - **Terraform**: Use scripts in the `terraform/` directory to provision the instance.
 - **CI/CD**: Automatic deployment via `.github/workflows/deploy.yml`.
 - **Required Secrets**: Register `OCI_HOST`, `OCI_SSH_KEY`, `DOCKERHUB_USERNAME`, and `DOCKERHUB_TOKEN` in GitHub Secrets.
+- **Monitoring Secret**: Set `OCI_MONITORING_SOURCE_CIDR` to the trusted public CIDR allowed to scrape production metrics.
+
+## Monitoring Notes
+- Set `GRAFANA_PASSWORD` in `.env` before running `docker compose -f docker-compose.local-monitoring.yml up`.
+- Replace `YOUR_PRODUCTION_SERVER_IP` in `deploy/prometheus/prometheus.local.yml` with the actual production host before scraping remote metrics.
 
 ---
 

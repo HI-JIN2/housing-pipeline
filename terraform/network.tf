@@ -52,7 +52,7 @@ resource "oci_core_security_list" "housing_security_list" {
 
   ingress_security_rules {
     protocol = "6" # TCP
-    source   = "0.0.0.0/0"
+    source   = var.monitoring_source_cidr
     tcp_options {
       min = 8001
       max = 8002
@@ -96,10 +96,10 @@ resource "oci_core_security_list" "housing_security_list" {
 }
 
 resource "oci_core_subnet" "housing_subnet" {
-  cidr_block     = "10.0.1.0/24"
-  compartment_id = var.compartment_ocid
-  vcn_id         = oci_core_vcn.housing_vcn.id
-  display_name   = "housing_subnet"
+  cidr_block        = "10.0.1.0/24"
+  compartment_id    = var.compartment_ocid
+  vcn_id            = oci_core_vcn.housing_vcn.id
+  display_name      = "housing_subnet"
   security_list_ids = [oci_core_security_list.housing_security_list.id]
-  route_table_id = oci_core_vcn.housing_vcn.default_route_table_id
+  route_table_id    = oci_core_vcn.housing_vcn.default_route_table_id
 }
