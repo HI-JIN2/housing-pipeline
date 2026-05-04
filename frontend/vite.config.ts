@@ -14,6 +14,12 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: {
       proxy: {
+        // Admin API -> admin-agent (8002)
+        '/api/admin': {
+          target: 'http://localhost:8002',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/admin/, '/api'),
+        },
         '/api': {
           target: 'http://localhost:8000',
           changeOrigin: true,

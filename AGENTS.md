@@ -99,6 +99,7 @@ General:
 
 Git / commits:
 - Commit messages use a conventional tag like `feat:`, `fix:`, `chore:` and then a concise Korean description.
+- If the user says `달팽이`, treat it as a default workflow trigger: pull latest `main`, create a new branch from that updated `main`, then do the requested work and finish with commit, push, and PR creation unless the user says otherwise.
 
 Python (`parser-agent/`, `geo-agent/`, `shared/`):
 - Imports: stdlib, third-party, local; avoid circular imports (prefer moving helpers into `services/`).

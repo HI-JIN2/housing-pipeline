@@ -5,7 +5,13 @@ from typing import List, Dict, Any, Optional
 class MongoService:
     def __init__(self):
         mongo_url = os.getenv("MONGO_URL", "mongodb://localhost:27017")
-        self.client = AsyncIOMotorClient(mongo_url)
+        # Fail fast when DB is down to avoid hanging the API/UI.
+        self.client = AsyncIOMotorClient(
+            mongo_url,
+            serverSelectionTimeoutMS=2000,
+            connectTimeoutMS=2000,
+            socketTimeoutMS=20000,
+        )
         self.db = self.client.housing_db
         self.cache_collection = self.db.llm_cache
         self.announcements_collection = self.db.announcements
