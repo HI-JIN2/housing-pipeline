@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'production-parser'
+    static_configs:
+      - targets: ['YOUR_PRODUCTION_SERVER_IP:8000']
+
+  - job_name: 'production-geo'
+    static_configs:
+      - targets: ['YOUR_PRODUCTION_SERVER_IP:8001']
+
+  - job_name: 'production-admin'
+    static_configs:
+      - targets: ['YOUR_PRODUCTION_SERVER_IP:8002']

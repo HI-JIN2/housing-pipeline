@@ -29,6 +29,8 @@ services:
       - KAKAO_REST_API_KEY=${KAKAO_REST_API_KEY}
     depends_on:
       - db
+    ports:
+      - "8001:8000"
     deploy:
       resources:
         limits:
@@ -86,6 +88,8 @@ services:
     depends_on:
       - mongodb
       - db
+    ports:
+      - "8002:8002"
 
   prometheus:
     image: prom/prometheus:latest

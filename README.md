@@ -46,9 +46,10 @@ English version is available at [README_EN.md](./README_EN.md).
 | `KAKAO_REST_API_KEY` | **필수** | 지오코딩 및 지하철역 검색용 카카오 로컬 API 키 |
 | `ADMIN_PASSWORD` | **필수** | 관리자 인증용 비밀번호 |
 | `GEMINI_API_KEY` | 선택 | Gemini API 키 (미설정 시 UI에서 입력 가능) |
-| `GRAFANA_PASSWORD` | 선택 | Grafana 관리자 비밀번호 (기본값: `admin`) |
+| `GRAFANA_PASSWORD` | 선택 | Grafana 관리자 비밀번호 (로컬 모니터링 사용 시 `.env`에 설정 권장) |
 | `POSTGRES_DSN` | 선택 | 선택 시 직접 설정 (기본값 제공됨) |
 | `MONGO_URL` | 선택 | 선택 시 직접 설정 (기본값 제공됨) |
+| `MONITORING_SOURCE_CIDR` | 선택 | 운영 메트릭 포트(8001-8002)에 접근할 수 있는 신뢰 CIDR. Terraform/OCI 배포 시 사용 |
 
 ### 3. 실행 방법
 ```bash
@@ -67,7 +68,7 @@ Oracle Cloud Infrastructure (OCI) Always Free 티어 배포를 위해 다음을 
 - **필요 시크릿 (GitHub Secrets)**:
   - 인프라: `OCI_HOST`, `OCI_SSH_KEY`, `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`
   - 앱 설정: `KAKAO_REST_API_KEY`, `ADMIN_PASSWORD`, `KAKAO_JS_KEY`
-  - 모니터링: `GRAFANA_PASSWORD` (선택)
+  - 모니터링: `GRAFANA_PASSWORD` (선택), `OCI_MONITORING_SOURCE_CIDR` (운영 메트릭 접근 허용 CIDR)
 
 ---
 
@@ -75,9 +76,13 @@ Oracle Cloud Infrastructure (OCI) Always Free 티어 배포를 위해 다음을 
 
 저사양 VM(1GB RAM) 환경에서도 안정적으로 구동되는 모니터링 시스템을 포함하고 있습니다.
 - **Prometheus (9090)**: 에이전트들의 실시간 상태 및 메트릭 수집
-- **Grafana (3000)**: 수집된 데이터 시각화 (기본 계정: `admin` / `admin`)
+- **Grafana (3000)**: 수집된 데이터 시각화 (`GRAFANA_PASSWORD`로 관리자 비밀번호 설정)
 - **OCI Monitoring**: 클라우드 네이티브 메트릭 연동 (Terraform으로 활성화)
 - **최적화**: Docker 리소스 제한(128MB) 및 수집 주기(30s) 조정을 통해 OOM 방지
+
+로컬 모니터링 실행 전 확인사항:
+- `docker-compose.local-monitoring.yml`은 `.env`의 `GRAFANA_PASSWORD`를 사용합니다.
+- `deploy/prometheus/prometheus.local.yml`의 `YOUR_PRODUCTION_SERVER_IP`를 실제 운영 서버 주소로 교체한 뒤 실행해야 합니다.
 
 ---
 

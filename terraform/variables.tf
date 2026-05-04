@@ -40,3 +40,8 @@ variable "ssh_public_key" {
   description = "Public SSH key for Ubuntu login"
   type        = string
 }
+
+variable "monitoring_source_cidr" {
+  description = "Trusted CIDR allowed to scrape production metrics on ports 8001-8002"
+  type        = string
+}
