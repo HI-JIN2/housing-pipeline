@@ -12,6 +12,7 @@ English version is available at [README_EN.md](./README_EN.md).
 - **다이나믹 스키마 지원**: nosql를 활용해 공고문마다 다른 상세 정보(주차대수, 승강기여부, 방개수 등)를 빠짐없이 추출하여 '더보기' 섹션에 표시합니다.
 - **GEO 데이터 보강**: 추출된 주소의 좌표를 식별하고, PostGIS를 통해 인근 지하철역명 및 실제 도보 거리를 계산합니다. (데이터 프리뷰 단계에서 즉시 시각화)
 - **SH/LH 공고 모니터링**: SH, LH 공고 게시판을 주기적으로 크롤링하고 신규 공고를 Slack으로 자동 전송합니다.
+- **GitHub Actions 트리거**: 운영 환경에서는 상주 스케줄러 대신 GitHub Actions cron이 notice-agent 수동 실행 API를 호출합니다.
 - **유연한 API 키 관리**: `.env`에 Gemini 키가 설정되어 있지 않아도, 웹 UI에서 직접 입력하고 브라우저(`localStorage`)에 저장하여 사용할 수 있습니다.
 - **관리자 보안**: 공고 업로드 및 삭제 시 `ADMIN_PASSWORD`를 통한 인증을 거쳐 데이터 무결성을 보호합니다.
 - **경량 아키텍처**: HTTP 기반의 2-Agent 구조를 채택하여 저사양 서버(Oracle Cloud Free Tier 등)에서도 원활하게 구동됩니다.
@@ -30,7 +31,7 @@ English version is available at [README_EN.md](./README_EN.md).
    - **데이터 보강**: 카카오 로컬 API 지오코딩 및 PostGIS 공간 쿼리를 통한 지하철역 매칭을 수행합니다.
    - **데이터 저장**: 보강된 최종 데이터를 PostgreSQL에 저장합니다.
 3. **Notice Agent (8003 포트)**:
-   - **모니터링**: SH/LH 공고 목록을 주기적으로 수집하고 신규 공고 여부를 판별합니다.
+   - **모니터링 API**: SH/LH 공고 목록을 수집하고 신규 공고 여부를 판별하는 실행 엔드포인트를 제공합니다.
    - **알림/조회**: Slack Incoming Webhook으로 신규 공고를 보내고, 수동 실행 및 최근 공고 조회 API를 제공합니다.
 
 ---
@@ -71,7 +72,7 @@ chmod +x start_all.sh
 
 ### 4. SH/LH 공고 Slack 알림
 - `notice-agent`는 MongoDB에 수집 이력을 저장하고 새로 들어온 공고만 Slack으로 전송합니다.
-- 로컬 기본값은 `NOTICE_CRAWLER_ENABLED=false`라서 자동 수집이 꺼져 있습니다.
+- 로컬 기본값은 `NOTICE_CRAWLER_ENABLED=false`라서 상주 스케줄러가 꺼져 있습니다.
 - 수동 1회 실행:
 ```bash
 curl -X POST http://localhost:8003/api/notices/run-once
@@ -86,6 +87,12 @@ curl -X POST http://localhost:8003/api/notices/run-once \
 curl "http://localhost:8003/api/notices/recent?limit=20&source=SH"
 ```
 
+### 5. 운영 크론 실행 방식
+- 운영에서는 `notice-agent` 내부 루프를 켜지 않고, GitHub Actions 스케줄 워크플로우가 `POST /api/notices/run-once`를 호출합니다.
+- 워크플로우 파일: `.github/workflows/notice-crawl.yml`
+- 기본 스케줄: 매시 정각 (`0 * * * *`)
+- 필요 시 GitHub Actions `workflow_dispatch`로 수동 실행도 가능합니다.
+
 ---
 
 ## 클라우드 배포
@@ -95,7 +102,8 @@ Oracle Cloud Infrastructure (OCI) Always Free 티어 배포를 위해 다음을 
 - **CI/CD**: `.github/workflows/deploy.yml`을 통해 자동 배포를 수행합니다.
 - **필요 시크릿 (GitHub Secrets)**:
   - 인프라: `OCI_HOST`, `OCI_SSH_KEY`, `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`
-  - 앱 설정: `KAKAO_REST_API_KEY`, `ADMIN_PASSWORD`, `KAKAO_JS_KEY`, `SLACK_WEBHOOK_URL`
+  - 앱 설정: `KAKAO_REST_API_KEY`, `ADMIN_PASSWORD`, `KAKAO_JS_KEY`, `SLACK_WEBHOOK_URL`, `NOTICE_AGENT_TOKEN`
+  - 크롤링 트리거: `NOTICE_AGENT_BASE_URL` (예: `http://YOUR_SERVER_IP:8003`)
   - 모니터링: `GRAFANA_PASSWORD` (선택), `OCI_MONITORING_SOURCE_CIDR` (운영 메트릭 접근 허용 CIDR)
 
 ---

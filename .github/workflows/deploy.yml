@@ -141,8 +141,9 @@ jobs:
             echo "KAKAO_REST_API_KEY=${{ secrets.KAKAO_REST_API_KEY }}" >> .env
             echo "ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}" >> .env
             echo "SLACK_WEBHOOK_URL=${{ secrets.SLACK_WEBHOOK_URL }}" >> .env
-            echo "NOTICE_CRAWLER_ENABLED=true" >> .env
+            echo "NOTICE_CRAWLER_ENABLED=false" >> .env
             echo "NOTICE_CRAWL_INTERVAL_SECONDS=3600" >> .env
+            echo "NOTICE_AGENT_TOKEN=${{ secrets.NOTICE_AGENT_TOKEN }}" >> .env
             
             # Use sudo docker compose with --env-file and specify the project directory
             sudo docker compose --env-file .env -f deploy/docker-compose.prod.yml pull

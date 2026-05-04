@@ -97,7 +97,7 @@ services:
     environment:
       - MONGO_URL=mongodb://mongodb:27017
       - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
-      - NOTICE_CRAWLER_ENABLED=${NOTICE_CRAWLER_ENABLED:-true}
+      - NOTICE_CRAWLER_ENABLED=${NOTICE_CRAWLER_ENABLED:-false}
       - NOTICE_CRAWL_INTERVAL_SECONDS=${NOTICE_CRAWL_INTERVAL_SECONDS:-3600}
       - NOTICE_NOTIFY_ON_BOOTSTRAP=${NOTICE_NOTIFY_ON_BOOTSTRAP:-false}
       - SH_NOTICE_URL=${SH_NOTICE_URL:-https://www.i-sh.co.kr/app/lay2/program/S48T561C563/www/brd/m_247/list.do?multi_itm_seq=2}

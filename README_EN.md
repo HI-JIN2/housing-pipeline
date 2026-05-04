@@ -10,6 +10,7 @@ An intelligent data pipeline that automatically extracts key information from re
 - **Dynamic Schema Support**: Captures all available metadata (e.g., parking, elevators, rooms) and displays them in an expandable "More Info" UI.
 - **Geo-Enrichment**: Identifies coordinates and calculates nearest subway stations/distances via PostGIS. Results are visualized instantly during the **Data Preview** stage.
 - **SH/LH Notice Monitoring**: Periodically crawls SH and LH notice boards and sends Slack alerts for newly discovered announcements.
+- **GitHub Actions Triggering**: In production, GitHub Actions cron calls the notice-agent API instead of keeping a resident scheduler loop on the server.
 - **Flexible API Key Management**: Allows users to enter Gemini API keys directly in the web UI and persists them in `localStorage`.
 - **Admin Security**: Protects data integrity by requiring an `ADMIN_PASSWORD` for announcement uploads and deletions.
 - **Lightweight Architecture**: HTTP-based 2-Agent structure optimized for low-specification servers like Oracle Cloud Always Free.
@@ -28,7 +29,7 @@ The system consists of three independent agents:
    - **Enrichment**: Geocoding via Kakao Local API and subway matching via PostGIS spatial queries.
    - **Persistence**: Saves enriched data to PostgreSQL.
 3. **Notice Agent (Port 8003)**:
-   - **Monitoring**: Crawls SH/LH notice boards on a schedule and detects newly posted items.
+   - **Monitoring API**: Exposes the execution endpoint that crawls SH/LH notice boards and detects newly posted items.
    - **Notification / API**: Sends Slack Incoming Webhook alerts and exposes manual run and recent-history APIs.
 
 ---
@@ -76,7 +77,7 @@ chmod +x start_all.sh
 
 ### 4. SH/LH Slack Notice Alerts
 - `notice-agent` stores crawl history in MongoDB and only sends Slack alerts for newly inserted notices.
-- Local auto-scheduling is disabled by default with `NOTICE_CRAWLER_ENABLED=false`.
+- Local resident scheduling is disabled by default with `NOTICE_CRAWLER_ENABLED=false`.
 - Trigger one crawl manually:
 ```bash
 curl -X POST http://localhost:8003/api/notices/run-once
@@ -91,6 +92,12 @@ curl -X POST http://localhost:8003/api/notices/run-once \
 curl "http://localhost:8003/api/notices/recent?limit=20&source=LH"
 ```
 
+### 5. Production Cron Trigger
+- In production, the resident notice-agent loop stays disabled and GitHub Actions calls `POST /api/notices/run-once` on a schedule.
+- Workflow file: `.github/workflows/notice-crawl.yml`
+- Default schedule: every hour at minute 0 (`0 * * * *`)
+- You can also trigger it manually with `workflow_dispatch`.
+
 ---
 
 ## Cloud Deployment
@@ -98,7 +105,7 @@ curl "http://localhost:8003/api/notices/recent?limit=20&source=LH"
 For Oracle Cloud Infrastructure (OCI) Always Free deployment:
 - **Terraform**: Use scripts in the `terraform/` directory to provision the instance.
 - **CI/CD**: Automatic deployment via `.github/workflows/deploy.yml`.
-- **Required Secrets**: Register `OCI_HOST`, `OCI_SSH_KEY`, `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, and `SLACK_WEBHOOK_URL` in GitHub Secrets.
+- **Required Secrets**: Register `OCI_HOST`, `OCI_SSH_KEY`, `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, `SLACK_WEBHOOK_URL`, `NOTICE_AGENT_TOKEN`, and `NOTICE_AGENT_BASE_URL` in GitHub Secrets.
 - **Monitoring Secret**: Set `OCI_MONITORING_SOURCE_CIDR` to the trusted public CIDR allowed to scrape production metrics.
 
 ## Monitoring Notes
