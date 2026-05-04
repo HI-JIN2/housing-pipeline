@@ -18,6 +18,7 @@ mongo_service = MongoService()
 GEO_AGENT_URL = os.getenv("GEO_AGENT_URL", "http://localhost:8001/api/enrich")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "PLEASE_SET_ADMIN_PASSWORD_IN_DOTENV")
 
+
 def verify_admin(x_admin_password: Optional[str] = Header(None)):
     if x_admin_password != ADMIN_PASSWORD:
         raise HTTPException(status_code=401, detail="Unauthorized: Admin password required or incorrect.")
@@ -65,6 +66,7 @@ async def get_announcement(announcement_id: str, x_admin_password: Optional[str]
         raise HTTPException(status_code=404, detail="Announcement not found")
     return {"status": "success", "data": doc}
 
+
 @router.post("/upload")
 async def upload_files(
     background_tasks: BackgroundTasks,
@@ -88,6 +90,7 @@ async def upload_files(
         excel_service=ExcelService,
     )
 
+
 @router.post("/save")
 async def save_announcement(data: dict, x_admin_password: Optional[str] = Header(None)):
     verify_admin(x_admin_password)
@@ -99,6 +102,7 @@ async def save_announcement(data: dict, x_admin_password: Optional[str] = Header
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
 
 @router.delete("/announcements/{announcement_id}")
 async def delete_announcement(announcement_id: str, x_admin_password: Optional[str] = Header(None)):
@@ -114,12 +118,13 @@ async def delete_announcement(announcement_id: str, x_admin_password: Optional[s
                     await client.delete(f"{base_url}/housing/{quote(title)}", timeout=10.0)
                 except Exception as e:
                     logging.error(f"Geo Agent cleanup failed: {e}")
-    
+
     success = await mongo_service.delete_announcement(announcement_id)
     if not success:
         raise HTTPException(status_code=404, detail="Announcement not found")
-        
+
     return {"status": "success"}
+
 
 @router.get("/status/{job_id}")
 async def get_job_status(job_id: str, x_admin_password: Optional[str] = Header(None)):
@@ -129,13 +134,13 @@ async def get_job_status(job_id: str, x_admin_password: Optional[str] = Header(N
         status = await mongo_service.db.job_status.find_one({"job_id": job_id})
         if not status:
             return {"count": 0, "step": "PENDING", "total": 0}
-        
+
         result_data = None
         if status.get("step") == "COMPLETED":
             text_hash = status.get("hash")
             if text_hash:
                 result_data = await mongo_service.get_cache(text_hash)
-        
+
         return {
             "count": status.get("count", 0),
             "step": status.get("step", ""),
