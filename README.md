@@ -11,6 +11,7 @@ English version is available at [README_EN.md](./README_EN.md).
 - **스마트 문서 파싱**: PDF 및 엑셀 공고문에서 주택명, 공급호수, 주소, 임대료 등을 LLM(Gemini)을 활용해 파싱 및 구조화합니다.
 - **다이나믹 스키마 지원**: nosql를 활용해 공고문마다 다른 상세 정보(주차대수, 승강기여부, 방개수 등)를 빠짐없이 추출하여 '더보기' 섹션에 표시합니다.
 - **GEO 데이터 보강**: 추출된 주소의 좌표를 식별하고, PostGIS를 통해 인근 지하철역명 및 실제 도보 거리를 계산합니다. (데이터 프리뷰 단계에서 즉시 시각화)
+- **SH/LH 공고 모니터링**: SH, LH 공고 게시판을 주기적으로 크롤링하고 신규 공고를 Slack으로 자동 전송합니다.
 - **유연한 API 키 관리**: `.env`에 Gemini 키가 설정되어 있지 않아도, 웹 UI에서 직접 입력하고 브라우저(`localStorage`)에 저장하여 사용할 수 있습니다.
 - **관리자 보안**: 공고 업로드 및 삭제 시 `ADMIN_PASSWORD`를 통한 인증을 거쳐 데이터 무결성을 보호합니다.
 - **경량 아키텍처**: HTTP 기반의 2-Agent 구조를 채택하여 저사양 서버(Oracle Cloud Free Tier 등)에서도 원활하게 구동됩니다.
@@ -20,7 +21,7 @@ English version is available at [README_EN.md](./README_EN.md).
 
 ## 시스템 아키텍처
 
-본 시스템은 두 개의 독립적인 에이전트로 구성됩니다:
+본 시스템은 세 개의 독립적인 에이전트로 구성됩니다:
 
 1. **Parser Agent (8000 포트)**: 
    - **UI**: 파일 업로드, 분석 결과 시각화, 지도 인터렉션 기능을 제공합니다.
@@ -28,6 +29,9 @@ English version is available at [README_EN.md](./README_EN.md).
 2. **Geo Agent (8001 포트)**: 
    - **데이터 보강**: 카카오 로컬 API 지오코딩 및 PostGIS 공간 쿼리를 통한 지하철역 매칭을 수행합니다.
    - **데이터 저장**: 보강된 최종 데이터를 PostgreSQL에 저장합니다.
+3. **Notice Agent (8003 포트)**:
+   - **모니터링**: SH/LH 공고 목록을 주기적으로 수집하고 신규 공고 여부를 판별합니다.
+   - **알림/조회**: Slack Incoming Webhook으로 신규 공고를 보내고, 수동 실행 및 최근 공고 조회 API를 제공합니다.
 
 ---
 
@@ -47,6 +51,13 @@ English version is available at [README_EN.md](./README_EN.md).
 | `ADMIN_PASSWORD` | **필수** | 관리자 인증용 비밀번호 |
 | `GEMINI_API_KEY` | 선택 | Gemini API 키 (미설정 시 UI에서 입력 가능) |
 | `GRAFANA_PASSWORD` | 선택 | Grafana 관리자 비밀번호 (로컬 모니터링 사용 시 `.env`에 설정 권장) |
+| `SLACK_WEBHOOK_URL` | 선택 | 신규 SH/LH 공고를 보낼 Slack Incoming Webhook URL |
+| `NOTICE_CRAWLER_ENABLED` | 선택 | `true`면 notice-agent가 백그라운드 스케줄러로 주기 수집 실행 |
+| `NOTICE_CRAWL_INTERVAL_SECONDS` | 선택 | notice-agent 수집 주기(초), 기본값 `3600` |
+| `NOTICE_NOTIFY_ON_BOOTSTRAP` | 선택 | 첫 시드 수집 때도 Slack 알림을 보낼지 여부, 기본값 `false` |
+| `NOTICE_AGENT_TOKEN` | 선택 | notice-agent 수동 실행/조회 API 보호용 내부 토큰 |
+| `SH_NOTICE_URL` | 선택 | SH 공고 목록 URL 커스텀 값 |
+| `LH_NOTICE_URL` | 선택 | LH 공고 목록 URL 커스텀 값 |
 | `POSTGRES_DSN` | 선택 | 선택 시 직접 설정 (기본값 제공됨) |
 | `MONGO_URL` | 선택 | 선택 시 직접 설정 (기본값 제공됨) |
 | `MONITORING_SOURCE_CIDR` | 선택 | 운영 메트릭 포트(8001-8002)에 접근할 수 있는 신뢰 CIDR. Terraform/OCI 배포 시 사용 |
@@ -58,6 +69,23 @@ chmod +x start_all.sh
 ```
 > 실행 스크립트는 프로세스 정리, 인프라 구동, 의존성 설치 및 지하철역 데이터베이스 초기화를 자동으로 수행합니다.
 
+### 4. SH/LH 공고 Slack 알림
+- `notice-agent`는 MongoDB에 수집 이력을 저장하고 새로 들어온 공고만 Slack으로 전송합니다.
+- 로컬 기본값은 `NOTICE_CRAWLER_ENABLED=false`라서 자동 수집이 꺼져 있습니다.
+- 수동 1회 실행:
+```bash
+curl -X POST http://localhost:8003/api/notices/run-once
+```
+- 토큰을 설정한 경우:
+```bash
+curl -X POST http://localhost:8003/api/notices/run-once \
+  -H "x-notice-token: your_token"
+```
+- 최근 수집 공고 조회:
+```bash
+curl "http://localhost:8003/api/notices/recent?limit=20&source=SH"
+```
+
 ---
 
 ## 클라우드 배포
@@ -67,7 +95,7 @@ Oracle Cloud Infrastructure (OCI) Always Free 티어 배포를 위해 다음을 
 - **CI/CD**: `.github/workflows/deploy.yml`을 통해 자동 배포를 수행합니다.
 - **필요 시크릿 (GitHub Secrets)**:
   - 인프라: `OCI_HOST`, `OCI_SSH_KEY`, `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`
-  - 앱 설정: `KAKAO_REST_API_KEY`, `ADMIN_PASSWORD`, `KAKAO_JS_KEY`
+  - 앱 설정: `KAKAO_REST_API_KEY`, `ADMIN_PASSWORD`, `KAKAO_JS_KEY`, `SLACK_WEBHOOK_URL`
   - 모니터링: `GRAFANA_PASSWORD` (선택), `OCI_MONITORING_SOURCE_CIDR` (운영 메트릭 접근 허용 CIDR)
 
 ---

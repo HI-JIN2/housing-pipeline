@@ -44,6 +44,14 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/housing-admin:latest
 
+      - name: Build and Push Notice Agent
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: notice-agent/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/housing-notice:latest
+
       - name: Inject Kakao JS Key
         run: |
           sed -i "s|%VITE_KAKAO_JS_KEY%|${{ secrets.KAKAO_JS_KEY }}|g" frontend/index.html
@@ -128,9 +136,13 @@ jobs:
             echo "DOCKER_IMAGE_PARSER=${{ secrets.DOCKERHUB_USERNAME }}/housing-parser:latest" > .env
             echo "DOCKER_IMAGE_GEO=${{ secrets.DOCKERHUB_USERNAME }}/housing-geo:latest" >> .env
             echo "DOCKER_IMAGE_ADMIN=${{ secrets.DOCKERHUB_USERNAME }}/housing-admin:latest" >> .env
+            echo "DOCKER_IMAGE_NOTICE=${{ secrets.DOCKERHUB_USERNAME }}/housing-notice:latest" >> .env
             echo "DOCKER_IMAGE_FRONTEND=${{ secrets.DOCKERHUB_USERNAME }}/housing-frontend:latest" >> .env
             echo "KAKAO_REST_API_KEY=${{ secrets.KAKAO_REST_API_KEY }}" >> .env
             echo "ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}" >> .env
+            echo "SLACK_WEBHOOK_URL=${{ secrets.SLACK_WEBHOOK_URL }}" >> .env
+            echo "NOTICE_CRAWLER_ENABLED=true" >> .env
+            echo "NOTICE_CRAWL_INTERVAL_SECONDS=3600" >> .env
             
             # Use sudo docker compose with --env-file and specify the project directory
             sudo docker compose --env-file .env -f deploy/docker-compose.prod.yml pull

@@ -10,11 +10,13 @@ cleanup() {
     kill $PARSER_PID 2>/dev/null
     kill $ADMIN_PID 2>/dev/null
     kill $GEO_PID 2>/dev/null
+    kill $NOTICE_PID 2>/dev/null
     kill $FRONTEND_PID 2>/dev/null
     pkill -f "uvicorn main:app" 2>/dev/null
     lsof -i :8000 -t | xargs kill -9 2>/dev/null
     lsof -i :8002 -t | xargs kill -9 2>/dev/null
     lsof -i :8001 -t | xargs kill -9 2>/dev/null
+    lsof -i :8003 -t | xargs kill -9 2>/dev/null
     lsof -i :5173 -t | xargs kill -9 2>/dev/null
     
     echo "2/2 끄는 중... [Docker-Compose 인프라]"
@@ -39,9 +41,10 @@ echo "🧹 이전 좀비 프로세스 정리 중..."
 lsof -i :8000 -t | xargs kill -9 > /dev/null 2>&1 || true
 lsof -i :8002 -t | xargs kill -9 > /dev/null 2>&1 || true
 lsof -i :8001 -t | xargs kill -9 > /dev/null 2>&1 || true
+lsof -i :8003 -t | xargs kill -9 > /dev/null 2>&1 || true
 lsof -i :5173 -t | xargs kill -9 > /dev/null 2>&1 || true
 
-echo "[1/4] Docker Compose 인프라 (MongoDB, PostGIS) 시작 중..."
+echo "[1/6] Docker Compose 인프라 (MongoDB, PostGIS) 시작 중..."
 
 if [ "${SKIP_DOCKER}" = "1" ]; then
     echo "    -> SKIP_DOCKER=1: Docker 제어를 건너뜁니다."
@@ -98,7 +101,7 @@ else
 fi
 fi
 
-echo "[2/5] Parser Agent (사용자 조회 API) 포트 8000 실행 중..."
+echo "[2/6] Parser Agent (사용자 조회 API) 포트 8000 실행 중..."
 cd parser-agent
 if [ "${SKIP_INSTALL}" = "1" ]; then
     echo "    -> SKIP_INSTALL=1: pip 설치를 건너뜁니다."
@@ -109,7 +112,7 @@ python3 -m uvicorn main:app --reload --port 8000 &
 PARSER_PID=$!
 cd ..
 
-echo "[3/5] Admin Agent (업로드 및 관리 API) 포트 8002 실행 중..."
+echo "[3/6] Admin Agent (업로드 및 관리 API) 포트 8002 실행 중..."
 cd admin-agent
 if [ "${SKIP_INSTALL}" = "1" ]; then
     echo "    -> SKIP_INSTALL=1: pip 설치를 건너뜁니다."
@@ -120,7 +123,7 @@ python3 -m uvicorn main:app --reload --port 8002 &
 ADMIN_PID=$!
 cd ..
 
-echo "[4/5] Geo Agent (위치 정보/길찾기) 포트 8001 실행 중..."
+echo "[4/6] Geo Agent (위치 정보/길찾기) 포트 8001 실행 중..."
 cd geo-agent
 if [ "${SKIP_INSTALL}" = "1" ]; then
     echo "    -> SKIP_INSTALL=1: pip 설치를 건너뜁니다."
@@ -133,7 +136,18 @@ python3 -m uvicorn main:app --reload --port 8001 &
 GEO_PID=$!
 cd ..
 
-echo "[5/5] Frontend (React) 포트 5173 실행 중..."
+echo "[5/6] Notice Agent (SH/LH 크롤링 및 Slack 알림) 포트 8003 실행 중..."
+cd notice-agent
+if [ "${SKIP_INSTALL}" = "1" ]; then
+    echo "    -> SKIP_INSTALL=1: pip 설치를 건너뜁니다."
+else
+    pip3 install -r requirements.txt > /dev/null 2>&1
+fi
+python3 -m uvicorn main:app --reload --port 8003 &
+NOTICE_PID=$!
+cd ..
+
+echo "[6/6] Frontend (React) 포트 5173 실행 중..."
 cd frontend
 if [ "${SKIP_INSTALL}" = "1" ]; then
     echo "    -> SKIP_INSTALL=1: npm 설치를 건너뜁니다."

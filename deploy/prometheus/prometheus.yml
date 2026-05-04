@@ -10,7 +10,10 @@ scrape_configs:
   - job_name: 'geo-agent'
     static_configs:
       - targets: ['geo-agent:8001']
-
   - job_name: 'admin-agent'
     static_configs:
       - targets: ['admin-agent:8002']
+
+  - job_name: 'notice-agent'
+    static_configs:
+      - targets: ['notice-agent:8003']
