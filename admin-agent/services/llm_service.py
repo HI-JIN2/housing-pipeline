@@ -1,6 +1,6 @@
 from google import genai
 from google.genai import types
-from openai import OpenAI
+from openai import AsyncOpenAI
 from shared.models import ParsedHousingData
 from typing import List, Optional
 import os
@@ -45,7 +45,7 @@ class LLMService:
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         self.openai_client = None
         if self.openai_api_key and self.openai_api_key != "your_openai_api_key_here":
-            self.openai_client = OpenAI(api_key=self.openai_api_key)
+            self.openai_client = AsyncOpenAI(api_key=self.openai_api_key)
         
         self.mongo_service = MongoService()
 
@@ -129,6 +129,7 @@ class LLMService:
         api_key: Optional[str] = None,
     ):
         text_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
+        all_houses = []
         
         # Configure Provider & Model (Default values)
         active_model = model_name or self.active_gemini_model
@@ -153,7 +154,7 @@ class LLMService:
                         "model": active_model,
                         "provider": provider,
                         "key_idx": self.current_key_idx if provider == "gemini" and not api_key else -1,
-                        "partial_houses": all_houses[-20:] if 'all_houses' in locals() else []
+                        "partial_houses": all_houses[-20:]
                     }
                     if message:
                         update_fields["message"] = message
@@ -175,7 +176,7 @@ class LLMService:
 
         # Configure Provider & Model (Override if needed)
         if provider == "openai":
-            client = OpenAI(api_key=api_key) if api_key else self.openai_client
+            client = AsyncOpenAI(api_key=api_key) if api_key else self.openai_client
             active_model = model_name or "gpt-4o"
             if active_model.startswith("models/"):
                 active_model = active_model.replace("models/", "")
@@ -326,7 +327,7 @@ class LLMService:
                                     },
                                 )
                                 if provider == "openai":
-                                    response = client.chat.completions.create(
+                                    response = await client.chat.completions.create(
                                         model=local_model,
                                         messages=[{"role": "user", "content": prompt}],
                                         response_format={"type": "json_object"},
