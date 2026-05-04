@@ -1,13 +1,10 @@
-from fastapi import FastAPI, APIRouter, UploadFile, File, Form, HTTPException, Header, BackgroundTasks
-from typing import Optional, List
+from fastapi import APIRouter, HTTPException
 import httpx
-import asyncio
-from services.pdf_service import PDFService
-from services.excel_service import ExcelService
 from services.llm_service import LLMService
 from services.mongo_service import MongoService
-import uuid
+from services.announcement_detail_pipeline import execute_announcement_detail_pipeline
 import os
+from pymongo.errors import ServerSelectionTimeoutError
 
 router = APIRouter()
 llm_service = LLMService()
@@ -28,8 +25,11 @@ def get_config():
 
 @router.get("/announcements")
 async def get_announcements():
-    data = await mongo_service.get_recent_announcements(limit=20)
-    return {"status": "success", "data": data}
+    try:
+        data = await mongo_service.get_recent_announcements(limit=20)
+        return {"status": "success", "data": data}
+    except ServerSelectionTimeoutError:
+        raise HTTPException(status_code=503, detail="MongoDB is not reachable (is Docker running?)")
 
 @router.get("/geocode")
 async def proxy_geocode(address: str):
@@ -50,33 +50,16 @@ async def proxy_geocode(address: str):
 
 @router.get("/announcements/{announcement_id}")
 async def get_announcement_details(announcement_id: str):
-    data = await mongo_service.get_announcement(announcement_id)
-    if not data:
-        raise HTTPException(status_code=404, detail="Not found")
-    
-    parsed_houses = data.get("parsed_houses", [])
-    if not parsed_houses:
-        return {"status": "success", "data": []}
-        
-    # Get enriched data for these houses (lat, lng, etc.)
     from main import db_service
-    house_ids = [h.get("id") for h in parsed_houses if h.get("id")]
-    enriched_data_list = await db_service.get_enriched_data_by_ids(house_ids)
-    
-    # Merge enriched data into parsed_houses
-    enriched_map = {item["id"]: item for item in enriched_data_list}
-    
-    results = []
-    for house in parsed_houses:
-        house_id = house.get("id")
-        if house_id in enriched_map:
-            # Merge enriched fields
-            merged = {**house, **enriched_map[house_id]}
-            results.append(merged)
-        else:
-            results.append(house)
-            
-    return {"status": "success", "data": results}
+
+    houses = await execute_announcement_detail_pipeline(
+        announcement_id=announcement_id,
+        mongo_service=mongo_service,
+        db_service=db_service,
+    )
+    if houses is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"status": "success", "data": houses}
 
 
 @router.get("/status/{job_id}")
@@ -113,5 +96,3 @@ async def get_job_status(job_id: str):
         }
     except Exception as e:
         return {"count": 0, "step": "ERROR", "detail": str(e)}
-
-
