@@ -23,6 +23,7 @@ class NoticeMonitorService:
         self.enabled = _env_flag("NOTICE_CRAWLER_ENABLED", default=False)
         self.notify_on_bootstrap = _env_flag("NOTICE_NOTIFY_ON_BOOTSTRAP", default=False)
         self.interval_seconds = int(os.getenv("NOTICE_CRAWL_INTERVAL_SECONDS", "3600"))
+        self.item_concurrency = max(1, int(os.getenv("NOTICE_ITEM_CONCURRENCY", "5")))
         self.stop_event = asyncio.Event()
         self.scrapers = {
             "SH": ShScraper(os.getenv("SH_NOTICE_URL", DEFAULT_SH_NOTICE_URL)),
@@ -32,33 +33,51 @@ class NoticeMonitorService:
     async def crawl_once(self) -> dict[str, Any]:
         summary: dict[str, Any] = {"sources": {}, "totals": {"fetched": 0, "new": 0, "notified": 0}}
 
-        for source, scraper in self.scrapers.items():
-            items = await scraper.fetch_items()
-            had_existing = await self.mongo_service.has_source_items(source)
-            source_summary = {
-                "fetched": len(items),
-                "new": 0,
-                "notified": 0,
-                "bootstrap_seeded": not had_existing,
-            }
+        source_results = await asyncio.gather(
+            *(self._crawl_source(source, scraper) for source, scraper in self.scrapers.items())
+        )
 
-            for item in items:
-                created = await self.mongo_service.save_notice_if_new(item)
-                if not created:
-                    continue
-
-                source_summary["new"] += 1
-                if had_existing or self.notify_on_bootstrap:
-                    notified = await self.slack_service.send_new_notice(item)
-                    if notified:
-                        source_summary["notified"] += 1
-
+        for source, source_summary in source_results:
             summary["sources"][source] = source_summary
             summary["totals"]["fetched"] += source_summary["fetched"]
             summary["totals"]["new"] += source_summary["new"]
             summary["totals"]["notified"] += source_summary["notified"]
 
         return summary
+
+    async def _crawl_source(self, source: str, scraper: Any) -> tuple[str, dict[str, Any]]:
+        items = await scraper.fetch_items()
+        had_existing = await self.mongo_service.has_source_items(source)
+        source_summary = {
+            "fetched": len(items),
+            "new": 0,
+            "notified": 0,
+            "bootstrap_seeded": not had_existing,
+        }
+
+        semaphore = asyncio.Semaphore(self.item_concurrency)
+        results = await asyncio.gather(
+            *(self._process_item(item, had_existing, semaphore) for item in items)
+        )
+
+        source_summary["new"] = sum(new_count for new_count, _ in results)
+        source_summary["notified"] = sum(notified_count for _, notified_count in results)
+
+        return source, source_summary
+
+    async def _process_item(
+        self, item: Any, had_existing: bool, semaphore: asyncio.Semaphore
+    ) -> tuple[int, int]:
+        async with semaphore:
+            created = await self.mongo_service.save_notice_if_new(item)
+            if not created:
+                return 0, 0
+
+            if had_existing or self.notify_on_bootstrap:
+                notified = await self.slack_service.send_new_notice(item)
+                return 1, int(notified)
+
+            return 1, 0
 
     async def run_forever(self):
         if not self.enabled:
