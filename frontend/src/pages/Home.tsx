@@ -9,6 +9,7 @@ import MapView from '../components/KakaoMapView';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import type { House, Announcement } from '../types';
+import { formatStationLabel } from '../utils/station';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -146,7 +147,7 @@ const Home: React.FC = () => {
                       {house.nearest_station && (
                         <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                           <span className="text-[9px] font-black px-1.5 py-0.5 bg-emerald-50 text-emerald-600 rounded flex items-center gap-0.5">
-                            <Layers className="w-2.5 h-2.5" /> {house.nearest_station}역
+                            <Layers className="w-2.5 h-2.5" /> {formatStationLabel(house.nearest_station)}
                           </span>
                           <span className="text-[10px] text-slate-400 font-medium">도보 {house.walking_time_mins}분 ({house.distance_meters}m)</span>
                         </div>

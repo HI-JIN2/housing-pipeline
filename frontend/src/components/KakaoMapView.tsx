@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useCallback } from 'react';
+import { formatStationLabel } from '../utils/station';
 
 declare global {
   interface Window {
@@ -98,8 +99,9 @@ const KakaoMapView: React.FC<MapProps> = ({ houses, selectedHouseId }) => {
         // Format values for the info window
         const depositStr = house.deposit ? `${house.deposit.toLocaleString()}만원` : '-';
         const rentStr = house.monthly_rent !== undefined ? `${house.monthly_rent.toLocaleString()}만원` : '-';
+        const stationLabel = formatStationLabel(house.nearest_station);
         const transportInfo = house.nearest_station 
-          ? `<p style="margin:8px 0 0; font-size:11px; color:#10b981; font-weight:bold;">🚉 ${house.nearest_station}역 (도보 ${house.walking_time_mins || '?'}분 ${house.distance_meters ? `· ${house.distance_meters}m` : ''})</p>`
+          ? `<p style="margin:8px 0 0; font-size:11px; color:#10b981; font-weight:bold;">🚉 ${stationLabel} (도보 ${house.walking_time_mins || '?'}분 ${house.distance_meters ? `· ${house.distance_meters}m` : ''})</p>`
           : '';
 
         const iwContent = `
