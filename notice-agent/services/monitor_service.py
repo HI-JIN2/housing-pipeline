@@ -34,10 +34,16 @@ class NoticeMonitorService:
         summary: dict[str, Any] = {"sources": {}, "totals": {"fetched": 0, "new": 0, "notified": 0}}
 
         source_results = await asyncio.gather(
-            *(self._crawl_source(source, scraper) for source, scraper in self.scrapers.items())
+            *(self._crawl_source(source, scraper) for source, scraper in self.scrapers.items()),
+            return_exceptions=True,
         )
 
-        for source, source_summary in source_results:
+        for result in source_results:
+            if isinstance(result, Exception):
+                logging.exception("Notice source crawl failed: %s", result)
+                continue
+
+            source, source_summary = result
             summary["sources"][source] = source_summary
             summary["totals"]["fetched"] += source_summary["fetched"]
             summary["totals"]["new"] += source_summary["new"]
@@ -57,11 +63,23 @@ class NoticeMonitorService:
 
         semaphore = asyncio.Semaphore(self.item_concurrency)
         results = await asyncio.gather(
-            *(self._process_item(item, had_existing, semaphore) for item in items)
+            *(self._process_item(item, had_existing, semaphore) for item in items),
+            return_exceptions=True,
         )
 
-        source_summary["new"] = sum(new_count for new_count, _ in results)
-        source_summary["notified"] = sum(notified_count for _, notified_count in results)
+        for item, result in zip(items, results):
+            if isinstance(result, Exception):
+                logging.exception(
+                    "Notice item task failed: source=%s external_id=%s title=%s",
+                    source,
+                    getattr(item, "external_id", "unknown"),
+                    getattr(item, "title", "unknown"),
+                )
+                continue
+
+            new_count, notified_count = result
+            source_summary["new"] += new_count
+            source_summary["notified"] += notified_count
 
         return source, source_summary
 
