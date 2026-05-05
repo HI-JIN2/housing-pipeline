@@ -5,6 +5,7 @@ from typing import Any
 
 from services.lh_scraper import DEFAULT_LH_NOTICE_URL, LhScraper
 from services.mongo_service import MongoService
+from services.pipeline_service import NoticePipelineService
 from services.sh_scraper import DEFAULT_SH_NOTICE_URL, ShScraper
 from services.slack_service import SlackService
 
@@ -20,6 +21,7 @@ class NoticeMonitorService:
     def __init__(self, mongo_service: MongoService, slack_service: SlackService):
         self.mongo_service = mongo_service
         self.slack_service = slack_service
+        self.pipeline_service = NoticePipelineService(mongo_service, slack_service)
         self.enabled = _env_flag("NOTICE_CRAWLER_ENABLED", default=False)
         self.notify_on_bootstrap = _env_flag("NOTICE_NOTIFY_ON_BOOTSTRAP", default=False)
         self.interval_seconds = int(os.getenv("NOTICE_CRAWL_INTERVAL_SECONDS", "3600"))
@@ -54,11 +56,12 @@ class NoticeMonitorService:
     async def _crawl_source(self, source: str, scraper: Any) -> tuple[str, dict[str, Any]]:
         items = await scraper.fetch_items()
         had_existing = await self.mongo_service.has_source_items(source)
-        source_summary = {
+        source_summary: dict[str, Any] = {
             "fetched": len(items),
             "new": 0,
             "notified": 0,
             "bootstrap_seeded": not had_existing,
+            "pipeline_runs": [],
         }
 
         semaphore = asyncio.Semaphore(self.item_concurrency)
@@ -77,25 +80,43 @@ class NoticeMonitorService:
                 )
                 continue
 
-            new_count, notified_count = result
-            source_summary["new"] += new_count
-            source_summary["notified"] += notified_count
+            source_summary["new"] += result["new"]
+            source_summary["notified"] += result["notified"]
+            if result["pipeline_run"] is not None:
+                source_summary["pipeline_runs"].append(result["pipeline_run"])
 
         return source, source_summary
 
     async def _process_item(
-        self, item: Any, had_existing: bool, semaphore: asyncio.Semaphore
-    ) -> tuple[int, int]:
+        self,
+        item: Any,
+        had_existing: bool,
+        semaphore: asyncio.Semaphore,
+    ) -> dict[str, Any]:
         async with semaphore:
             created = await self.mongo_service.save_notice_if_new(item)
             if not created:
-                return 0, 0
+                return {"new": 0, "notified": 0, "pipeline_run": None}
 
-            if had_existing or self.notify_on_bootstrap:
-                notified = await self.slack_service.send_new_notice(item)
-                return 1, int(notified)
-
-            return 1, 0
+            should_notify = had_existing or self.notify_on_bootstrap
+            pipeline_result = await self.pipeline_service.process_discovered_notice(
+                notice=item,
+                should_notify=should_notify,
+            )
+            return {
+                "new": 1,
+                "notified": int(pipeline_result.notified),
+                "pipeline_run": {
+                    "run_id": pipeline_result.run_id,
+                    "notice_key": pipeline_result.notice_key,
+                    "current_stage": (
+                        pipeline_result.current_stage.value if pipeline_result.current_stage else None
+                    ),
+                    "current_status": (
+                        pipeline_result.current_status.value if pipeline_result.current_status else None
+                    ),
+                },
+            }
 
     async def run_forever(self):
         if not self.enabled:
