@@ -33,3 +33,12 @@ async def list_recent_notices(
 ):
     verify_notice_token(x_notice_token)
     return await mongo_service.list_recent_notices(limit=limit, source=source)
+
+
+@router.get("/pipeline-runs/recent")
+async def list_recent_pipeline_runs(
+    limit: int = Query(default=20, ge=1, le=100),
+    x_notice_token: str | None = Header(default=None),
+):
+    verify_notice_token(x_notice_token)
+    return await mongo_service.list_recent_pipeline_runs(limit=limit)
